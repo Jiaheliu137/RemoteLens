@@ -16,3 +16,6 @@ node_modules/
 
 # Eagle writes this next to the manifest
 window-state.json
+
+# Release packages
+dist/

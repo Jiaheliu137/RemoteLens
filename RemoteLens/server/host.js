@@ -299,10 +299,13 @@ class Host {
             if (this.served && this.tailscale.dnsName) {
                 urls.push({ kind: 'tailscale-https', url: `https://${this.tailscale.dnsName}:${this.servePort}/` });
             }
+            // The plain Tailscale address is only worth showing when there is no HTTPS name to use instead.
+            // (With "allow LAN" every interface is listened on, so it works either way.)
+            const hasHttps = urls.length > 0;
             const direct = this.settings.allowLan
                 ? (this.tailscale.running ? this.tailscale.ips : [])
                 : this.bound.filter((ip) => this.tailscale.ips.includes(ip));
-            for (const ip of direct) urls.push({ kind: 'tailscale-ip', url: `http://${ip}:${port}/` });
+            if (!hasHttps) for (const ip of direct) urls.push({ kind: 'tailscale-ip', url: `http://${ip}:${port}/` });
             if (this.settings.allowLan) for (const ip of addresses.lan) urls.push({ kind: 'lan', url: `http://${ip}:${port}/` });
         }
         const current = this.pool ? this.pool.get('') : null;

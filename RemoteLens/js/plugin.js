@@ -39,6 +39,7 @@ function applyStaticText() {
     document.querySelectorAll('[data-i18n]').forEach((node) => {
         node.textContent = t(node.dataset.i18n);
     });
+    $('titlebar-help').title = t('ui.btnHelp');
     $('titlebar-minimize').title = t('ui.minimize');
     $('titlebar-close').title = t('ui.close');
 }
@@ -134,7 +135,7 @@ function renderUrls(state) {
     if (!urls.some((u) => u.kind === selectedUrlKind)) selectedUrlKind = urls.length ? urls[0].kind : '';
     const selected = urls.find((u) => u.kind === selectedUrlKind) || null;
     renderQr(selected ? selected.withToken : '');
-    $('qrHint').textContent = !state.running ? t('ui.offHint') : (selected ? t('ui.scanHint') : t('ui.noUrl'));
+    $('qrHint').textContent = !state.running ? '' : (selected ? t('ui.scanHint') : t('ui.noUrl'));
     list.replaceChildren(...urls.map((entry) => {
         const row = document.createElement('div');
         row.className = `url-row${entry.kind === selectedUrlKind ? ' active' : ''}`;
@@ -160,15 +161,100 @@ function renderUrls(state) {
     }));
 }
 
-function noticeFor(state) {
-    if (!state.settings.enabled) return '';
-    if (state.listenError) return t('ui.errPort', { port: state.settings.port, error: state.listenError });
-    if (state.libraryError === 'library_missing') return t('ui.errLibraryMissing');
-    if (state.libraryError && state.libraryError !== 'no_library') return t('ui.errLibrary', { error: state.libraryError });
-    if (!state.tailscale.installed) return t('ui.noTailscale');
-    if (!state.tailscale.running) return t('ui.tailscaleStopped');
-    if (!state.tailscale.https) return t('ui.tailscaleNoHttps');
-    return '';
+const LINKS = {
+    tailscale: 'https://tailscale.com/download',
+    tailscaleDns: 'https://login.tailscale.com/admin/dns',
+    readme: 'https://github.com/Jiaheliu137/RemoteLens#readme',
+    readmeZh: 'https://github.com/Jiaheliu137/RemoteLens/blob/main/README_zh.md',
+};
+
+function openExternal(url) {
+    try {
+        eagle.shell.openExternal(url);
+    } catch (err) {
+        log('warn', `cannot open ${url}: ${err.message}`);
+    }
+}
+
+function openHelp() {
+    openExternal(String(eagle.app.locale || '').toLowerCase().startsWith('zh') ? LINKS.readmeZh : LINKS.readme);
+}
+
+/**
+ * What the user should do next, as a small guide: errors first, then the missing piece of the
+ * set-up, then nothing once a phone can connect from anywhere.
+ * @returns {{tone:'error'|'guide'|'info', title:string, steps?:string[], note?:string, actions?:{label:string, run:Function}[]}|null}
+ */
+function guideFor(state) {
+    const recheck = { label: t('ui.btnRecheck'), run: () => host.recheck() };
+    if (!state.settings.enabled) {
+        return { tone: 'info', title: t('ui.startTitle'), steps: [t('ui.start1'), t('ui.start2'), t('ui.start3')] };
+    }
+    if (state.listenError) return { tone: 'error', title: t('ui.errPort', { port: state.settings.port, error: state.listenError }) };
+    if (state.libraryError === 'library_missing') return { tone: 'error', title: t('ui.errLibraryMissing') };
+    if (state.libraryError && state.libraryError !== 'no_library') {
+        return { tone: 'error', title: t('ui.errLibrary', { error: state.libraryError }) };
+    }
+    if (!state.tailscale.installed) {
+        return {
+            tone: 'guide',
+            title: t('ui.guideNoTsTitle'),
+            steps: [t('ui.guideNoTs1'), t('ui.guideNoTs2'), t('ui.guideNoTs3')],
+            actions: [{ label: t('ui.btnGetTailscale'), run: () => openExternal(LINKS.tailscale) }, recheck],
+        };
+    }
+    if (!state.tailscale.running) {
+        return { tone: 'guide', title: t('ui.guideStoppedTitle'), steps: [t('ui.guideStopped1'), t('ui.guideNoTs3')], actions: [recheck] };
+    }
+    if (!state.tailscale.https) {
+        return {
+            tone: 'info',
+            title: t('ui.guideHttpsTitle'),
+            note: t('ui.guideHttpsNote'),
+            actions: [{ label: t('ui.btnAdmin'), run: () => openExternal(LINKS.tailscaleDns) }, recheck],
+        };
+    }
+    return null;
+}
+
+function renderGuide(guide) {
+    const box = $('notice');
+    box.hidden = !guide;
+    if (!guide) return;
+    box.className = `notice notice-${guide.tone}`;
+    const title = document.createElement('div');
+    title.className = 'notice-title';
+    title.textContent = guide.title;
+    const parts = [title];
+    if (guide.steps && guide.steps.length) {
+        const list = document.createElement('ol');
+        list.className = 'notice-steps';
+        for (const step of guide.steps) {
+            const item = document.createElement('li');
+            item.textContent = step;
+            list.appendChild(item);
+        }
+        parts.push(list);
+    }
+    if (guide.note) {
+        const note = document.createElement('div');
+        note.className = 'notice-note';
+        note.textContent = guide.note;
+        parts.push(note);
+    }
+    if (guide.actions && guide.actions.length) {
+        const row = document.createElement('div');
+        row.className = 'notice-actions';
+        for (const action of guide.actions) {
+            const button = document.createElement('button');
+            button.className = 'btn-secondary';
+            button.textContent = action.label;
+            button.onclick = action.run;
+            row.appendChild(button);
+        }
+        parts.push(row);
+    }
+    box.replaceChildren(...parts);
 }
 
 async function render() {
@@ -180,9 +266,7 @@ async function render() {
     document.body.classList.toggle('is-running', state.running);
     document.body.classList.toggle('is-off', !state.settings.enabled);
 
-    const notice = noticeFor(state);
-    $('notice').textContent = notice;
-    $('notice').hidden = !notice;
+    renderGuide(guideFor(state));
 
     const libraryName = state.library ? state.library.name
         : path.basename(state.libraryPath || '').replace(/\.library$/i, '');
@@ -201,6 +285,7 @@ async function render() {
 }
 
 function bindControls() {
+    $('titlebar-help').addEventListener('click', openHelp);
     $('titlebar-minimize').addEventListener('click', () => eagle.window.minimize().catch(() => {}));
     // In service mode closing the window only hides it; the server keeps running in the background.
     $('titlebar-close').addEventListener('click', () => window.close());
@@ -260,8 +345,7 @@ eagle.onPluginCreate(async (plugin) => {
         startRefreshing();
     } catch (err) {
         log('error', `start-up failed: ${err.stack || err.message}`);
-        $('notice').textContent = String(err.message || err);
-        $('notice').hidden = false;
+        renderGuide({ tone: 'error', title: String(err.message || err) });
     }
 });
 

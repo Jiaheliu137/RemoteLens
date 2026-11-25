@@ -122,6 +122,14 @@ class Host {
         });
     }
 
+    /** Look at Tailscale and the network again right now (the user just installed or started something). */
+    recheck() {
+        return this._enqueue(async () => {
+            if (this.settings.enabled) await this._listen();
+            else this.tailscale = await tailscale.status();
+        });
+    }
+
     /** A new token signs out every device at once. */
     resetToken() {
         return this._enqueue(async () => {

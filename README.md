@@ -11,7 +11,10 @@ Eagle has no mobile app. RemoteLens runs a small web server inside Eagle and ser
 - **Only Eagle libraries.** Nothing else on the computer is scanned or reachable. The phone follows the library open in Eagle, and can open any other library Eagle knows without changing what Eagle shows on the computer (this can be switched off, leaving only the open library).
 - **Read-only.** The server accepts no write requests and never modifies the library folder.
 - **On only when you say so.** One switch in the plugin window. Off means no port is open at all.
-- **Eagle's own structure.** Folder tree, tags and tag groups, uncategorized / untagged, search over names, tags, notes and links, sorting, type filter.
+- **Eagle's own structure.** Folder tree, tags and tag groups, uncategorized / untagged, search over names, tags, notes and links, sorting.
+- **Filters.** Type, rating, format, shape (landscape / portrait / square) and dominant colour, freely combined.
+- **Two layouts.** Square cells, or justified rows that keep every picture's proportions, as in Eagle.
+- **Slideshow** in the viewer.
 - **Reading mode.** The images of a folder or search stitched into one seamless strip — vertical, or horizontal in either direction — for comics and photo sequences.
 - **Fast on a phone.** Virtualised grid using Eagle's existing thumbnails; full-screen viewer with swipe, pinch and double-tap zoom; videos stream with seeking.
 - **Light previews.** Large images are downsized on demand (and cached outside the library), so a phone on mobile data does not pull 5 MB originals. HEIC and RAW are converted when the system can decode them.

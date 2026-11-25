@@ -10,7 +10,10 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 
-const INDEX_CACHE_VERSION = 3;
+const INDEX_CACHE_VERSION = 4;
+const PALETTE_MIN_RATIO = 8;
+const PALETTE_KEEP = 4;
+const COLOR_DISTANCE = 110;
 const READ_CONCURRENCY = 48;
 const QUERY_CACHE_SIZE = 24;
 
@@ -69,6 +72,38 @@ function isSafeFilePart(name, ext) {
     return /^[a-z0-9_+-]{1,16}$/.test(ext);
 }
 
+/** The few dominant colours Eagle extracted, each packed as 0xRRGGBB. */
+function packPalette(palettes) {
+    if (!Array.isArray(palettes)) return [];
+    const out = [];
+    for (const entry of palettes) {
+        const c = entry && entry.color;
+        if (!Array.isArray(c) || c.length < 3 || !(Number(entry.ratio) >= PALETTE_MIN_RATIO)) continue;
+        out.push(((c[0] & 255) << 16) | ((c[1] & 255) << 8) | (c[2] & 255));
+        if (out.length >= PALETTE_KEEP) break;
+    }
+    return out;
+}
+
+/** Perceptual-ish distance between two packed colours ("redmean"), roughly 0..765. */
+function colorDistance(a, b) {
+    const r1 = a >> 16;
+    const r2 = b >> 16;
+    const dr = r1 - r2;
+    const dg = ((a >> 8) & 255) - ((b >> 8) & 255);
+    const db = (a & 255) - (b & 255);
+    const mean = (r1 + r2) / 2;
+    return Math.sqrt((2 + mean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - mean) / 256) * db * db);
+}
+
+function shapeOf(item) {
+    if (!item.w || !item.h) return '';
+    const ratio = item.w / item.h;
+    if (ratio > 1.08) return 'landscape';
+    if (ratio < 0.93) return 'portrait';
+    return 'square';
+}
+
 function toRecord(meta) {
     const ext = String(meta.ext || '').toLowerCase();
     const name = String(meta.name == null ? '' : meta.name);
@@ -91,6 +126,7 @@ function toRecord(meta) {
         annotation: String(meta.annotation || ''),
         url: String(meta.url || ''),
         duration: Number(meta.duration) || 0,
+        pal: packPalette(meta.palettes),
         deleted: meta.isDeleted === true,
     };
 }
@@ -152,6 +188,7 @@ class Library {
         this.itemMtime = new Map();
         this.folders = { roots: [], byId: new Map(), hidden: new Set() };
         this.tags = [];
+        this.exts = [];
         this.tagGroups = [];
         this.counts = { all: 0, uncategorized: 0, untagged: 0 };
         this.loadedAt = 0;
@@ -244,6 +281,7 @@ class Library {
 
     _summarize() {
         const tagCount = new Map();
+        const extCount = new Map();
         const counts = { all: 0, uncategorized: 0, untagged: 0 };
         for (const node of this.folders.byId.values()) {
             node.count = 0;
@@ -252,6 +290,7 @@ class Library {
         for (const item of this.items.values()) {
             if (!this.isVisible(item)) continue;
             counts.all++;
+            extCount.set(item.ext, (extCount.get(item.ext) || 0) + 1);
             if (item.tags.length === 0) counts.untagged++;
             for (const t of item.tags) tagCount.set(t, (tagCount.get(t) || 0) + 1);
             const known = item.folders.filter((f) => this.folders.byId.has(f));
@@ -264,6 +303,7 @@ class Library {
             for (const a of withAncestors) this.folders.byId.get(a).total++;
         }
         this.counts = counts;
+        this.exts = Array.from(extCount, ([ext, count]) => ({ ext, count })).sort((a, b) => b.count - a.count);
         this.tags = Array.from(tagCount, ([name, count]) => ({ name, count }))
             .sort((a, b) => b.count - a.count || collator.compare(a.name, b.name));
     }
@@ -281,11 +321,13 @@ class Library {
     }
 
     /**
-     * @param {object} q {scope:'all'|'uncategorized'|'untagged'|'folder', folder, recursive, tags[], text, kind, sort, order}
+     * @param {object} q {scope:'all'|'uncategorized'|'untagged'|'folder', folder, recursive, tags[], text, kind,
+     *                    star (minimum rating), exts[], shape, color (0xRRGGBB or null), sort, order}
      * @returns {{total:number, ids:string[]}} the full ordered id list (cached per library version)
      */
     query(q) {
-        const key = JSON.stringify([q.scope, q.folder, q.recursive, q.tags, q.text, q.kind, q.sort, q.order]);
+        const key = JSON.stringify([q.scope, q.folder, q.recursive, q.tags, q.text, q.kind, q.star, q.exts, q.shape,
+            q.color, q.sort, q.order]);
         const hit = this._queryCache.get(key);
         if (hit) {
             this._queryCache.delete(key);
@@ -297,10 +339,16 @@ class Library {
             : null;
         const terms = String(q.text || '').toLowerCase().split(/\s+/).filter(Boolean);
         const wantTags = q.tags || [];
+        const wantExts = q.exts && q.exts.length ? new Set(q.exts) : null;
+        const wantColor = Number.isInteger(q.color) ? q.color : null;
         const matched = [];
         for (const item of this.items.values()) {
             if (!this.isVisible(item)) continue;
             if (q.kind && item.kind !== q.kind) continue;
+            if (q.star && item.star < q.star) continue;
+            if (wantExts && !wantExts.has(item.ext)) continue;
+            if (q.shape && shapeOf(item) !== q.shape) continue;
+            if (wantColor !== null && !item.pal.some((c) => colorDistance(c, wantColor) <= COLOR_DISTANCE)) continue;
             if (folderSet && !item.folders.some((f) => folderSet.has(f))) continue;
             if (q.scope === 'uncategorized' && item.folders.some((f) => this.folders.byId.has(f))) continue;
             if (q.scope === 'untagged' && item.tags.length > 0) continue;
@@ -318,6 +366,21 @@ class Library {
         this._queryCache.set(key, result);
         if (this._queryCache.size > QUERY_CACHE_SIZE) this._queryCache.delete(this._queryCache.keys().next().value);
         return result;
+    }
+
+    /**
+     * Width/height ratio of every item of a query, x1000, for laying out a whole view at once.
+     * @returns {Buffer} little-endian Uint16 per item (1000 when the size is unknown)
+     */
+    ratios(q) {
+        const { ids } = this.query(q);
+        const out = Buffer.alloc(ids.length * 2);
+        for (let i = 0; i < ids.length; i++) {
+            const item = this.items.get(ids[i]);
+            const ratio = item.w && item.h ? Math.round((item.w / item.h) * 1000) : 1000;
+            out.writeUInt16LE(Math.min(20000, Math.max(50, ratio)), i * 2);
+        }
+        return out;
     }
 
     _haystack(item) {

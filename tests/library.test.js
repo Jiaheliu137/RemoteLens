@@ -8,7 +8,10 @@ const net = require('../RemoteLens/server/net');
 const { parseRange } = require('../RemoteLens/server/sendfile');
 const { createLibrary, cleanup } = require('./fixture');
 
-const base = { scope: 'all', folder: '', recursive: true, tags: [], text: '', kind: '', sort: 'created', order: 'desc' };
+const base = {
+    scope: 'all', folder: '', recursive: true, tags: [], text: '', kind: '', star: 0, exts: [], shape: '', color: null,
+    sort: 'created', order: 'desc',
+};
 
 test('library index', async (t) => {
     const fx = createLibrary();
@@ -51,6 +54,18 @@ test('library index', async (t) => {
         assert.equal(await library.contained(path.join(fx.lib, 'metadata.json')), null);
         assert.equal(await library.contained(path.join(fx.lib, 'images', 'A1.info', 'missing.jpg')), null);
         assert.deepEqual(library.visibleTagGroups()[0].tags, ['tokyo', 'kyoto']);
+    });
+
+    await t.test('filters by rating, format, shape and colour, and reports ratios', () => {
+        assert.deepEqual(library.query({ ...base, star: 4 }).ids, ['A2']);
+        assert.deepEqual(library.query({ ...base, exts: ['png', 'mov'] }).ids, ['A3', 'V1']);
+        assert.deepEqual(library.query({ ...base, shape: 'portrait' }).ids, ['A3']);
+        assert.equal(library.query({ ...base, shape: 'landscape' }).total, 5);
+        assert.deepEqual(library.query({ ...base, color: 0xe02020 }).ids, ['A1']);
+        assert.equal(library.query({ ...base, color: 0x20e020 }).total, 0);
+        assert.deepEqual(library.exts.map((e) => e.ext).sort(), ['heic', 'jpg', 'mov', 'png', 'svg']);
+        const ratios = library.ratios({ ...base, exts: ['png', 'mov'] });
+        assert.deepEqual([ratios.readUInt16LE(0), ratios.readUInt16LE(2)], [500, 1333]);
     });
 
     await t.test('sorts names naturally and by size', () => {

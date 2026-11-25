@@ -38,9 +38,12 @@ function createLibrary() {
         folders, smartFolders: [], tagsGroups: [{ id: 'G1', name: 'Places', tags: ['tokyo', 'kyoto', 'secret-tag'] }],
     }));
     const items = [
-        item('A1', 'sakura', 'jpg', { folders: ['TOKYO'], tags: ['tokyo', 'spring'], btime: 5000, size: 300 }),
-        item('A2', 'temple 10', 'jpg', { folders: ['JAPAN'], tags: ['kyoto'], btime: 4000, size: 200, annotation: 'golden pavilion' }),
-        item('A3', 'temple 2', 'png', { folders: ['JAPAN'], tags: [], btime: 3000 }),
+        item('A1', 'sakura', 'jpg', {
+            folders: ['TOKYO'], tags: ['tokyo', 'spring'], btime: 5000, size: 300,
+            palettes: [{ color: [230, 40, 40], ratio: 60 }, { color: [20, 230, 20], ratio: 2 }],
+        }),
+        item('A2', 'temple 10', 'jpg', { folders: ['JAPAN'], tags: ['kyoto'], btime: 4000, size: 200, annotation: 'golden pavilion', star: 4 }),
+        item('A3', 'temple 2', 'png', { folders: ['JAPAN'], tags: [], btime: 3000, width: 20, height: 40 }),
         item('V1', 'clip', 'mov', { folders: ['TOKYO'], tags: ['tokyo'], duration: 12.4, btime: 2000 }),
         item('U1', 'loose', 'heic', { folders: [], tags: ['misc'] }),
         item('T1', 'trashed', 'jpg', { folders: ['JAPAN'], isDeleted: true }),

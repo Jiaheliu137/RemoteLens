@@ -295,6 +295,10 @@ function createApp(deps) {
             tags: p.getAll('tag').map(String).filter(Boolean).slice(0, 20),
             text: String(p.get('q') || '').slice(0, 200),
             kind,
+            star: Math.min(5, Math.max(0, Number.parseInt(p.get('star'), 10) || 0)),
+            exts: p.getAll('ext').map((e) => String(e).toLowerCase()).filter(Boolean).slice(0, 30),
+            shape: ['landscape', 'portrait', 'square'].includes(p.get('shape')) ? p.get('shape') : '',
+            color: /^[0-9a-f]{6}$/i.test(p.get('color') || '') ? Number.parseInt(p.get('color'), 16) : null,
             sort: String(p.get('sort') || 'added'),
             order: p.get('order') === 'asc' ? 'asc' : 'desc',
         };
@@ -318,6 +322,7 @@ function createApp(deps) {
                 counts: library.counts,
                 folders: folderTree(library.folders.roots),
                 tags: library.tags,
+                exts: library.exts,
                 tagGroups: library.visibleTagGroups(),
             });
         }
@@ -333,6 +338,11 @@ function createApp(deps) {
             const locate = url.searchParams.get('locate');
             if (locate) body.index = result.ids.indexOf(locate);
             return json(req, res, 200, body);
+        }
+        if (url.pathname === '/api/ratios') {
+            const q = parseQuery(url, library);
+            if (!q) return json(req, res, 404, { error: 'folder_not_found' });
+            return send(req, res, 200, library.ratios(q), { 'Content-Type': 'application/octet-stream' });
         }
         const detail = /^\/api\/item\/([A-Za-z0-9]+)$/.exec(url.pathname);
         if (detail) {

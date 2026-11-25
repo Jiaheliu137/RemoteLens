@@ -29,6 +29,11 @@
         onDesktop: ['电脑当前', 'Open on computer'], opening: ['正在打开素材库，首次打开大的库需要一点时间…', 'Opening the library. A large one takes a moment the first time…'],
         reader: ['阅读模式', 'Reading mode'], readerV: ['竖向', 'Vertical'], readerL: ['横向 →', 'Horizontal →'], readerR: ['横向 ←', 'Horizontal ←'],
         readerEmpty: ['这里没有可以连续阅读的图片', 'No images to read here'],
+        layout: ['布局', 'Layout'], layoutGrid: ['方格', 'Squares'], layoutJust: ['自适应', 'Justified'],
+        filter: ['筛选', 'Filter'], anyRating: ['不限', 'Any'], shape: ['形状', 'Shape'], anyShape: ['不限', 'Any'],
+        landscape: ['横图', 'Landscape'], portrait: ['竖图', 'Portrait'], square: ['方图', 'Square'],
+        color: ['颜色', 'Colour'], formats: ['格式', 'Formats'], clearFilters: ['清除筛选', 'Clear filters'],
+        slideshow: ['幻灯片', 'Slideshow'], stars: ['{0} 星及以上', '{0}+ stars'],
     };
     const t = (key, ...args) => {
         const pair = STRINGS[key];
@@ -49,7 +54,7 @@
         open: 'M14 5h5v5M19 5l-8 8M10 6H6a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4',
         play: 'M8 5l11 7l-11 7z', file: 'M7 3h7l5 5v13H7zM14 3v5h5',
         book: 'M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2zM20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z',
-        check: 'M5 12.5l4.5 4.5L19 7.5', swap: 'M7 4v16M7 4L3.5 7.5M7 4l3.5 3.5M17 20V4M17 20l-3.5-3.5M17 20l3.5-3.5',
+        check: 'M5 12.5l4.5 4.5L19 7.5', pause: 'M8 5v14M16 5v14', swap: 'M7 4v16M7 4L3.5 7.5M7 4l3.5 3.5M17 20V4M17 20l-3.5-3.5M17 20l3.5-3.5',
     };
     function icon(name, size = 22) {
         const svg = document.createElementNS(SVG_NS, 'svg');
@@ -101,7 +106,7 @@
     }) : '');
 
     const PREF_KEY = 'remotelens.prefs.v1';
-    const DEFAULT_PREFS = { sort: 'added', order: 'desc', cols: 0, recursive: true, expanded: {}, lib: '', reader: 'v' };
+    const DEFAULT_PREFS = { sort: 'added', order: 'desc', cols: 0, recursive: true, expanded: {}, lib: '', reader: 'v', layout: 'grid' };
     function loadPrefs() {
         try {
             return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREF_KEY) || '{}') };
@@ -155,7 +160,7 @@
     const state = {
         lib: null,
         folderIndex: new Map(),
-        view: { scope: 'all', folder: '', tags: [], q: '', kind: '' },
+        view: { scope: 'all', folder: '', tags: [], q: '', kind: '', star: 0, exts: [], shape: '', color: '' },
         total: 0,
         rows: [],
         pages: new Map(),
@@ -165,12 +170,17 @@
         scrollMemory: new Map(),
     };
 
+    const BLANK_VIEW = { scope: 'all', folder: '', tags: [], q: '', kind: '', star: 0, exts: [], shape: '', color: '' };
     function parseHash() {
         const raw = location.hash.replace(/^#\/?/, '');
         const cut = raw.indexOf('?');
         const segs = (cut === -1 ? raw : raw.slice(0, cut)).split('/');
         const params = new URLSearchParams(cut === -1 ? '' : raw.slice(cut + 1));
-        const view = { scope: 'all', folder: '', tags: params.getAll('tag'), q: params.get('q') || '', kind: params.get('kind') || '' };
+        const view = {
+            scope: 'all', folder: '', tags: params.getAll('tag'), q: params.get('q') || '', kind: params.get('kind') || '',
+            star: Number(params.get('star')) || 0, exts: params.getAll('ext'), shape: params.get('shape') || '',
+            color: /^[0-9a-f]{6}$/i.test(params.get('color') || '') ? params.get('color') : '',
+        };
         if (segs[0] === 'folder' && segs[1]) {
             view.scope = 'folder';
             view.folder = segs[1];
@@ -179,11 +189,22 @@
         }
         return view;
     }
-    function hashOf(view) {
-        const params = new URLSearchParams();
-        view.tags.forEach((tag) => params.append('tag', tag));
+    /** Filter part of a view as URL parameters (shared by the address bar and the API). */
+    function filterParams(view, params) {
+        (view.tags || []).forEach((tag) => params.append('tag', tag));
         if (view.q) params.set('q', view.q);
         if (view.kind) params.set('kind', view.kind);
+        if (view.star) params.set('star', String(view.star));
+        (view.exts || []).forEach((ext) => params.append('ext', ext));
+        if (view.shape) params.set('shape', view.shape);
+        if (view.color) params.set('color', view.color);
+        return params;
+    }
+    function isFiltered(view) {
+        return Boolean(view.q || (view.tags || []).length || view.kind || view.star || (view.exts || []).length || view.shape || view.color);
+    }
+    function hashOf(view) {
+        const params = filterParams(view, new URLSearchParams());
         const base = view.scope === 'folder' ? `folder/${view.folder}` : view.scope;
         const qs = params.toString();
         return `#/${base}${qs ? `?${qs}` : ''}`;
@@ -193,10 +214,7 @@
             scope: view.scope, sort: prefs.sort, order: prefs.order, recursive: prefs.recursive ? '1' : '0',
         });
         if (view.scope === 'folder') params.set('folder', view.folder);
-        view.tags.forEach((tag) => params.append('tag', tag));
-        if (view.q) params.set('q', view.q);
-        if (view.kind) params.set('kind', view.kind);
-        return params.toString();
+        return filterParams(view, params).toString();
     }
 
     // ───────────────────────── layers (drawer, sheets, viewer) ─────────────────────────
@@ -386,29 +404,88 @@
                 onClick: () => navigate({ ...view, tags: view.tags.filter((x) => x !== tag) }),
             }, icon('tag', 14), tag, icon('close', 12)));
         }
-        if (view.kind) {
-            chips.push(h('button', { class: 'chip chip-active', onClick: () => navigate({ ...view, kind: '' }) },
-                t(view.kind), icon('close', 12)));
-        }
+        const filterChip = (label, cleared, swatch) => chips.push(h('button', {
+            class: 'chip chip-active', onClick: () => navigate({ ...view, ...cleared }),
+        }, swatch && h('span', { class: 'swatch-dot', style: `background:#${swatch}` }), label, icon('close', 12)));
+        if (view.kind) filterChip(t(view.kind), { kind: '' });
+        if (view.star) filterChip(`${'★'.repeat(view.star)}+`, { star: 0 });
+        if (view.shape) filterChip(t(view.shape), { shape: '' });
+        if (view.color) filterChip(t('color'), { color: '' }, view.color);
+        for (const ext of view.exts || []) filterChip(ext.toUpperCase(), { exts: view.exts.filter((x) => x !== ext) });
         el.chips.replaceChildren(...chips);
         el.chips.hidden = chips.length === 0;
     }
 
     // ───────────────────────── virtual grid ─────────────────────────
-    const grid = { cols: 3, cell: 100, nodes: new Map(), fetchTimer: 0, frame: 0 };
+    // Two layouts share one virtualised renderer: square cells, or rows justified to the full width
+    // that keep each picture's proportions (needs every item's ratio up front, fetched as one small buffer).
+    const grid = { cols: 3, cell: 100, nodes: new Map(), fetchTimer: 0, frame: 0, ratios: null, just: null, height: 0 };
+    const RATIO_MIN = 0.45;
+    const RATIO_MAX = 3;
+    function justify(ratios, width, target) {
+        const n = ratios.length;
+        const x = new Float32Array(n);
+        const y = new Float32Array(n);
+        const w = new Float32Array(n);
+        const hh = new Float32Array(n);
+        const ratioAt = (i) => clamp(ratios[i] / 1000, RATIO_MIN, RATIO_MAX);
+        let top = 0;
+        let start = 0;
+        let sum = 0;
+        const place = (end, rowH) => {
+            let left = 0;
+            for (let i = start; i <= end; i++) {
+                x[i] = left;
+                y[i] = top;
+                w[i] = ratioAt(i) * rowH;
+                hh[i] = rowH;
+                left += w[i] + GAP;
+            }
+            top += rowH + GAP;
+            start = end + 1;
+            sum = 0;
+        };
+        for (let i = 0; i < n; i++) {
+            sum += ratioAt(i);
+            const gaps = (i - start) * GAP;
+            if (sum * target + gaps >= width) place(i, (width - gaps) / sum);
+        }
+        if (start < n) place(n - 1, Math.min(target * 1.25, (width - (n - 1 - start) * GAP) / sum));
+        return { x, y, w, h: hh, height: Math.max(0, top - GAP) };
+    }
     function layoutGrid() {
         const width = el.grid.clientWidth || window.innerWidth;
         const auto = width < 520 ? 3 : Math.max(4, Math.round(width / 170));
         grid.cols = prefs.cols > 0 ? prefs.cols : auto;
         grid.cell = (width - GAP * (grid.cols - 1)) / grid.cols;
-        const rowCount = Math.ceil(state.total / grid.cols);
-        el.grid.style.height = `${Math.max(0, rowCount * (grid.cell + GAP) - GAP)}px`;
+        const usable = prefs.layout === 'just' && grid.ratios && grid.ratios.length === state.total && state.total > 0;
+        grid.just = usable ? justify(grid.ratios, width, grid.cell) : null;
+        grid.height = grid.just
+            ? grid.just.height
+            : Math.max(0, Math.ceil(state.total / grid.cols) * (grid.cell + GAP) - GAP);
+        el.grid.style.height = `${grid.height}px`;
+    }
+    /** @returns {{x:number,y:number,w:number,h:number}} box of item `i` inside the grid */
+    function boxOf(i) {
+        if (grid.just) return { x: grid.just.x[i], y: grid.just.y[i], w: grid.just.w[i], h: grid.just.h[i] };
+        const step = grid.cell + GAP;
+        return { x: (i % grid.cols) * step, y: Math.floor(i / grid.cols) * step, w: grid.cell, h: grid.cell };
+    }
+    async function fetchRatios(generation) {
+        try {
+            const res = await fetch(withLib(`/api/ratios?${queryString(state.view)}`), { credentials: 'same-origin', cache: 'no-store' });
+            if (!res.ok || generation !== state.generation) return;
+            grid.ratios = new Uint16Array(await res.arrayBuffer());
+        } catch {
+            grid.ratios = null;
+        }
     }
     async function resetGrid(restoreScroll) {
         const generation = ++state.generation;
         state.total = 0;
         state.rows = [];
         state.pages = new Map();
+        grid.ratios = null;
         for (const node of grid.nodes.values()) node.remove();
         grid.nodes.clear();
         el.empty.hidden = true;
@@ -416,7 +493,7 @@
         layoutGrid();
         window.scrollTo(0, 0);
         try {
-            await fetchPage(0, generation);
+            await Promise.all([fetchPage(0, generation), prefs.layout === 'just' ? fetchRatios(generation) : null]);
         } catch (err) {
             if (generation === state.generation) showLoadError(err);
             return;
@@ -441,7 +518,7 @@
             data.items.forEach((row, i) => { state.rows[data.offset + i] = row; });
             el.subtitle.textContent = t('items', data.total.toLocaleString());
             el.empty.hidden = data.total > 0;
-            el.empty.textContent = state.view.q || state.view.tags.length || state.view.kind ? t('emptySearch') : t('empty');
+            el.empty.textContent = isFiltered(state.view) ? t('emptySearch') : t('empty');
         }).catch((err) => {
             state.pages.delete(page);
             throw err;
@@ -449,10 +526,29 @@
         state.pages.set(page, job);
         return job;
     }
+    /** First index whose box ends below `edge` (justified layout; tops never decrease with the index). */
+    function firstBelow(edge) {
+        const { y, h: heights } = grid.just;
+        let lo = 0;
+        let hi = state.total;
+        while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (y[mid] + heights[mid] < edge) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo;
+    }
     function visibleRange() {
-        const rowH = grid.cell + GAP;
         const top = -el.grid.getBoundingClientRect().top;
         const buffer = window.innerHeight * 0.8;
+        if (grid.just) {
+            const first = Math.min(state.total - 1, firstBelow(top - buffer));
+            let last = first;
+            const limit = top + window.innerHeight + buffer;
+            while (last + 1 < state.total && grid.just.y[last + 1] <= limit) last++;
+            return { first: Math.max(0, first), last };
+        }
+        const rowH = grid.cell + GAP;
         const firstRow = Math.max(0, Math.floor((top - buffer) / rowH));
         const lastRow = Math.floor((top + window.innerHeight + buffer) / rowH);
         return { first: firstRow * grid.cols, last: Math.min(state.total - 1, (lastRow + 1) * grid.cols - 1) };
@@ -487,7 +583,6 @@
                 grid.nodes.delete(index);
             }
         }
-        const size = `${grid.cell}px`;
         for (let i = first; i <= last; i++) {
             let node = grid.nodes.get(i);
             if (!node) {
@@ -498,11 +593,10 @@
             } else if (node.classList.contains('pending') && state.rows[i]) {
                 fillCell(node, state.rows[i]);
             }
-            const col = i % grid.cols;
-            const rowIndex = Math.floor(i / grid.cols);
-            node.style.width = size;
-            node.style.height = size;
-            node.style.transform = `translate(${col * (grid.cell + GAP)}px, ${rowIndex * (grid.cell + GAP)}px)`;
+            const box = boxOf(i);
+            node.style.width = `${box.w}px`;
+            node.style.height = `${box.h}px`;
+            node.style.transform = `translate(${box.x}px, ${box.y}px)`;
         }
         // Fetch only once scrolling settles, so a fling does not request every page it flies past.
         clearTimeout(grid.fetchTimer);
@@ -518,34 +612,39 @@
     function scheduleRender() {
         if (!grid.frame) grid.frame = requestAnimationFrame(renderGrid);
     }
-    function relayout() {
+    async function relayout() {
         const { first } = visibleRange();
-        const anchor = Math.max(0, first + grid.cols * 2);
+        const anchor = Math.min(Math.max(0, state.total - 1), first + grid.cols * 2);
+        if (prefs.layout === 'just' && !grid.ratios && state.total > 0) await fetchRatios(state.generation);
         for (const node of grid.nodes.values()) node.remove();
         grid.nodes.clear();
         layoutGrid();
-        scrollToIndex(anchor, 'start');
+        if (state.total > 0) scrollToIndex(anchor, 'start');
         renderGrid();
     }
     function scrollToIndex(index, where) {
-        const rowTop = Math.floor(index / grid.cols) * (grid.cell + GAP);
+        const box = boxOf(index);
         const gridTop = el.grid.getBoundingClientRect().top + window.scrollY;
         const headerH = el.header.offsetHeight;
-        const top = gridTop + rowTop - headerH;
+        const top = gridTop + box.y - headerH;
         if (where === 'start') {
             window.scrollTo(0, Math.max(0, top));
             return;
         }
-        const bottom = top + grid.cell + headerH;
+        const bottom = top + box.h + headerH;
         if (top < window.scrollY) window.scrollTo(0, Math.max(0, top - 8));
         else if (bottom > window.scrollY + window.innerHeight) window.scrollTo(0, bottom - window.innerHeight + 8);
     }
     window.addEventListener('scroll', scheduleRender, { passive: true });
     let resizeTimer = 0;
+    let lastGridWidth = 0;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
-            if (Math.abs((el.grid.clientWidth - GAP * (grid.cols - 1)) / grid.cols - grid.cell) > 0.5) relayout();
+            if (Math.abs(el.grid.clientWidth - lastGridWidth) > 0.5) {
+                lastGridWidth = el.grid.clientWidth;
+                relayout();
+            }
             if (viewer.open) resetZoom();
         }, 120);
     });
@@ -557,7 +656,7 @@
             count != null && h('span', { class: 'drawer-count' }, count.toLocaleString()));
     }
     function goFromDrawer(view) {
-        navigate({ scope: 'all', folder: '', tags: [], q: '', kind: '', ...view });
+        navigate({ ...BLANK_VIEW, ...view });
     }
     function renderFolderNodes(nodes, depth, expandedForPath) {
         return nodes.map((node) => {
@@ -646,6 +745,8 @@
                 onClick: () => onPick(value),
             }, text))));
     }
+    const SWATCHES = ['e53935', 'fb8c00', 'fdd835', '7cb342', '00897b', '29b6f6', '1e55d6', '8e44ad', 'ec407a', '8d6e63',
+        'ffffff', '9e9e9e', '111111'];
     function renderSortSheet() {
         const refresh = (patch, refetch) => {
             setPrefs(patch);
@@ -659,7 +760,33 @@
             h('button', { class: 'btn-secondary sheet-wide', onClick: () => openReader(null) }, icon('book', 18), t('reader')),
             optionGroup(t('sortBy'), sorts, prefs.sort, (sort) => refresh({ sort }, true)),
             optionGroup('', [['desc', t('desc')], ['asc', t('asc')]], prefs.order, (order) => refresh({ order }, true)),
+            optionGroup(t('layout'), [['grid', t('layoutGrid')], ['just', t('layoutJust')]], prefs.layout,
+                (layout) => refresh({ layout }, false)),
             optionGroup(t('type'), kinds, state.view.kind, (kind) => navigate({ ...state.view, kind })),
+            optionGroup(t('rating'), [[0, t('anyRating')], [1, '★'], [2, '★★'], [3, '★★★'], [4, '★★★★'], [5, '★★★★★']],
+                state.view.star, (star) => navigate({ ...state.view, star })),
+            optionGroup(t('shape'), [['', t('anyShape')], ['landscape', t('landscape')], ['portrait', t('portrait')], ['square', t('square')]],
+                state.view.shape, (shape) => navigate({ ...state.view, shape })),
+            h('div', { class: 'opt-group' },
+                h('div', { class: 'opt-label' }, t('color')),
+                h('div', { class: 'opt-row' }, SWATCHES.map((hex) => h('button', {
+                    class: `swatch${state.view.color === hex ? ' active' : ''}`,
+                    style: `background:#${hex}`,
+                    'aria-label': `#${hex}`,
+                    onClick: () => navigate({ ...state.view, color: state.view.color === hex ? '' : hex }),
+                })))),
+            h('div', { class: 'opt-group' },
+                h('div', { class: 'opt-label' }, t('formats')),
+                h('div', { class: 'opt-row' }, ((state.lib && state.lib.exts) || []).slice(0, 24).map((entry) => {
+                    const on = state.view.exts.includes(entry.ext);
+                    return h('button', {
+                        class: `opt${on ? ' active' : ''}`,
+                        onClick: () => navigate({
+                            ...state.view,
+                            exts: on ? state.view.exts.filter((x) => x !== entry.ext) : [...state.view.exts, entry.ext],
+                        }),
+                    }, entry.ext.toUpperCase(), h('span', { class: 'opt-count' }, entry.count.toLocaleString()));
+                }))),
             optionGroup(t('columns'), [[0, t('auto')], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6'], [8, '8']],
                 prefs.cols, (cols) => refresh({ cols }, false)),
             h('label', { class: 'opt-check' },
@@ -696,7 +823,7 @@
                 sections.push(h('div', { class: 'tag-group' }, `${group.name} (${names.length})`),
                     h('div', { class: 'tag-wrap' }, slice.map((name) => h('button', {
                         class: `chip${state.view.tags.includes(name) ? ' chip-active' : ''}`,
-                        onClick: () => navigate({ scope: 'all', folder: '', tags: [name], q: '', kind: '' }),
+                        onClick: () => navigate({ ...BLANK_VIEW, tags: [name] }),
                     }, name, h('span', { class: 'chip-count' }, String(counts.get(name)))))));
             }
             list.replaceChildren(...(sections.length ? sections : [h('div', { class: 'empty-inline' }, t('noTags'))]));
@@ -731,6 +858,7 @@
         const top = h('div', { class: 'v-top' },
             h('button', { class: 'icon-btn', 'aria-label': t('back'), onClick: closeTopLayer }, icon('back')),
             h('div', { class: 'v-title' }, viewer.name, viewer.counter),
+            (viewer.playBtn = h('button', { class: 'icon-btn', 'aria-label': t('slideshow'), onClick: toggleSlideshow }, icon('play'))),
             h('button', { class: 'icon-btn', 'aria-label': t('reader'), onClick: () => openReader(currentRow()) }, icon('book')),
             h('button', { class: 'icon-btn', 'aria-label': t('info'), onClick: openInfoSheet }, icon('info')));
         const prev = h('button', { class: 'v-nav v-prev', 'aria-label': t('prev'), onClick: () => step(-1) }, icon('back', 26));
@@ -822,12 +950,34 @@
         fillAllSlides();
         pushLayer(() => {
             viewer.open = false;
+            stopSlideshow();
             viewer.slides.forEach((slide) => slide.replaceChildren());
             el.viewer.hidden = true;
             document.body.classList.remove('viewing');
             scrollToIndex(viewer.index, 'nearest');
             scheduleRender();
         });
+    }
+    const SLIDE_MS = 4000;
+    function stopSlideshow() {
+        if (!viewer.slideTimer) return;
+        clearInterval(viewer.slideTimer);
+        viewer.slideTimer = 0;
+        viewer.playBtn.replaceChildren(icon('play'));
+    }
+    function toggleSlideshow() {
+        if (viewer.slideTimer) {
+            stopSlideshow();
+            return;
+        }
+        viewer.playBtn.replaceChildren(icon('pause'));
+        setChrome(false);
+        viewer.slideTimer = setInterval(() => {
+            const playing = viewer.slides[1].querySelector('video');
+            if (playing && !playing.paused && !playing.ended) return;
+            if (viewer.index >= state.total - 1) stopSlideshow();
+            else step(1);
+        }, SLIDE_MS);
     }
     function setChrome(on) {
         viewer.chrome = on;
@@ -1070,7 +1220,7 @@
         }
         const chipTo = (label, view, iconName) => h('button', {
             class: 'chip',
-            onClick: () => navigate({ scope: 'all', folder: '', tags: [], q: '', kind: '', ...view }),
+            onClick: () => navigate({ ...BLANK_VIEW, ...view }),
         }, icon(iconName, 14), label);
         const safeLink = /^https?:\/\//i.test(item.url);
         const rows = [
@@ -1324,7 +1474,7 @@
                 const libraryChanged = ping.id !== state.libId;
                 await loadLibrary();
                 if (viewer.open) return;
-                if (libraryChanged) navigate({ scope: 'all', folder: '', tags: [], q: '', kind: '' });
+                if (libraryChanged) navigate({ ...BLANK_VIEW });
                 await onRoute(false);
                 toast(t('libraryChanged'));
             }

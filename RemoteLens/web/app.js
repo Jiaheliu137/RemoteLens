@@ -24,6 +24,11 @@
         filterTags: ['筛选标签', 'Filter tags'], noTags: ['没有标签', 'No tags'], ungrouped: ['未分组', 'Ungrouped'],
         allTags: ['全部标签', 'All tags'], close: ['关闭', 'Close'], menu: ['菜单', 'Menu'], back: ['返回', 'Back'],
         prev: ['上一个', 'Previous'], next: ['下一个', 'Next'], libraryChanged: ['素材库有更新，已刷新', 'Library updated'],
+        libraries: ['素材库', 'Libraries'], followDesktop: ['跟随电脑', 'Follow the computer'],
+        followHint: ['电脑上的 Eagle 打开哪个库，这里就显示哪个', 'Shows whichever library Eagle has open on the computer'],
+        onDesktop: ['电脑当前', 'Open on computer'], opening: ['正在打开素材库，首次打开大的库需要一点时间…', 'Opening the library. A large one takes a moment the first time…'],
+        reader: ['阅读模式', 'Reading mode'], readerV: ['竖向', 'Vertical'], readerL: ['横向 →', 'Horizontal →'], readerR: ['横向 ←', 'Horizontal ←'],
+        readerEmpty: ['这里没有可以连续阅读的图片', 'No images to read here'],
     };
     const t = (key, ...args) => {
         const pair = STRINGS[key];
@@ -43,6 +48,8 @@
         tag: 'M4 4h7l9 9l-7 7l-9-9zM8 8v.5', download: 'M12 4v11M7 11l5 5l5-5M5 20h14',
         open: 'M14 5h5v5M19 5l-8 8M10 6H6a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-4',
         play: 'M8 5l11 7l-11 7z', file: 'M7 3h7l5 5v13H7zM14 3v5h5',
+        book: 'M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2zM20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z',
+        check: 'M5 12.5l4.5 4.5L19 7.5', swap: 'M7 4v16M7 4L3.5 7.5M7 4l3.5 3.5M17 20V4M17 20l-3.5-3.5M17 20l3.5-3.5',
     };
     function icon(name, size = 22) {
         const svg = document.createElementNS(SVG_NS, 'svg');
@@ -94,7 +101,7 @@
     }) : '');
 
     const PREF_KEY = 'remotelens.prefs.v1';
-    const DEFAULT_PREFS = { sort: 'added', order: 'desc', cols: 0, recursive: true, expanded: {} };
+    const DEFAULT_PREFS = { sort: 'added', order: 'desc', cols: 0, recursive: true, expanded: {}, lib: '', reader: 'v' };
     function loadPrefs() {
         try {
             return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREF_KEY) || '{}') };
@@ -111,15 +118,22 @@
     }
 
     class ApiError extends Error {
-        constructor(status) {
+        constructor(status, code) {
             super(`HTTP ${status}`);
             this.status = status;
+            this.code = code || '';
         }
     }
+    /** Add the chosen library to a URL; '' means "whatever Eagle has open", which needs no parameter. */
+    function withLib(url) {
+        return prefs.lib ? `${url}${url.includes('?') ? '&' : '?'}lib=${encodeURIComponent(prefs.lib)}` : url;
+    }
+    const mediaUrl = (kind, row) => withLib(`/${kind}/${row.id}?v=${row.v}`);
+    const fileUrl = (id, download) => withLib(`/file/${id}${download ? '?dl=1' : ''}`);
     async function api(path) {
         let res;
         try {
-            res = await fetch(path, { credentials: 'same-origin', cache: 'no-store' });
+            res = await fetch(withLib(path), { credentials: 'same-origin', cache: 'no-store' });
         } catch {
             throw new ApiError(0);
         }
@@ -127,9 +141,13 @@
             location.reload();
             throw new ApiError(401);
         }
-        if (!res.ok) throw new ApiError(res.status);
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new ApiError(res.status, body.error);
+        }
         return res.json();
     }
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     // ───────────────────────── state ─────────────────────────
     const PAGE = 150;
@@ -143,6 +161,7 @@
         pages: new Map(),
         generation: 0,
         version: 0,
+        libId: '',
         scrollMemory: new Map(),
     };
 
@@ -246,8 +265,9 @@
         el.scrim = h('div', { class: 'scrim', hidden: true, onClick: closeTopLayer });
         el.sheet = h('div', { class: 'sheet', hidden: true });
         el.viewer = h('div', { class: 'viewer', hidden: true });
+        el.reader = h('div', { class: 'reader', hidden: true });
         el.toast = h('div', { class: 'toast', hidden: true, role: 'status' });
-        document.getElementById('app').append(el.header, el.main, el.scrim, el.drawer, el.sheet, el.viewer, el.toast);
+        document.getElementById('app').append(el.header, el.main, el.scrim, el.drawer, el.sheet, el.viewer, el.reader, el.toast);
 
         let searchTimer = 0;
         el.searchInput.addEventListener('input', () => {
@@ -293,9 +313,29 @@
             indexFolders(node.children, node.id);
         }
     }
+    async function fetchLibrary() {
+        for (;;) {
+            try {
+                return await api('/api/library');
+            } catch (err) {
+                if (err.code === 'library_loading') {
+                    el.title.textContent = t('libraries');
+                    el.subtitle.textContent = '';
+                    setBanner(t('opening'));
+                    await sleep(800);
+                } else if (err.code === 'library_not_found' && prefs.lib) {
+                    setPrefs({ lib: '' });
+                } else {
+                    throw err;
+                }
+            }
+        }
+    }
     async function loadLibrary() {
-        const lib = await api('/api/library');
+        const lib = await fetchLibrary();
+        setBanner('');
         state.lib = lib;
+        state.libId = lib.id;
         state.version = lib.version;
         state.folderIndex = new Map();
         indexFolders(lib.folders, null);
@@ -389,7 +429,7 @@
     function showLoadError(err) {
         if (!(err instanceof ApiError)) console.error(err);
         el.subtitle.textContent = '';
-        setBanner(err.status === 503 ? t('unavailable') : t('offline'));
+        setBanner(err.code === 'library_loading' ? t('opening') : (err.status === 503 ? t('unavailable') : t('offline')));
     }
     async function fetchPage(page, generation = state.generation) {
         if (state.pages.has(page)) return state.pages.get(page);
@@ -430,7 +470,7 @@
             node.classList.add('noimg');
             node.prepend(h('span', { class: 'cell-ext' }, row.e.toUpperCase() || '?'));
         }, { once: true });
-        img.src = `/thumb/${row.id}?v=${row.v}`;
+        img.src = mediaUrl('thumb', row);
         node.appendChild(img);
         const badge = badgeFor(row);
         if (badge) node.appendChild(h('span', { class: `badge${row.k === 'v' ? ' badge-video' : ''}` }, badge));
@@ -557,7 +597,8 @@
         el.drawer.replaceChildren(
             h('div', { class: 'drawer-head' },
                 h('img', { src: '/icon.svg', alt: '', width: 28, height: 28 }),
-                h('div', { class: 'drawer-lib' }, lib.name),
+                h('button', { class: 'drawer-lib', onClick: openLibrarySheet },
+                    h('span', { class: 'drawer-lib-name' }, lib.name), icon('swap', 16)),
                 h('button', { class: 'icon-btn drawer-close', 'aria-label': t('close'), onClick: closeTopLayer }, icon('close'))),
             h('div', { class: 'drawer-scroll' },
                 drawerRow('all', t('all'), lib.counts.all, state.view.scope === 'all' && plain, () => goFromDrawer({})),
@@ -615,6 +656,7 @@
         const sorts = ['added', 'created', 'modified', 'name', 'size', 'duration', 'ext'].map((key) => [key, t(key)]);
         const kinds = [['', t('anyType')], ['image', t('image')], ['video', t('video')], ['audio', t('audio')], ['other', t('other')]];
         return h('div', null,
+            h('button', { class: 'btn-secondary sheet-wide', onClick: () => openReader(null) }, icon('book', 18), t('reader')),
             optionGroup(t('sortBy'), sorts, prefs.sort, (sort) => refresh({ sort }, true)),
             optionGroup('', [['desc', t('desc')], ['asc', t('asc')]], prefs.order, (order) => refresh({ order }, true)),
             optionGroup(t('type'), kinds, state.view.kind, (kind) => navigate({ ...state.view, kind })),
@@ -689,6 +731,7 @@
         const top = h('div', { class: 'v-top' },
             h('button', { class: 'icon-btn', 'aria-label': t('back'), onClick: closeTopLayer }, icon('back')),
             h('div', { class: 'v-title' }, viewer.name, viewer.counter),
+            h('button', { class: 'icon-btn', 'aria-label': t('reader'), onClick: () => openReader(currentRow()) }, icon('book')),
             h('button', { class: 'icon-btn', 'aria-label': t('info'), onClick: openInfoSheet }, icon('info')));
         const prev = h('button', { class: 'v-nav v-prev', 'aria-label': t('prev'), onClick: () => step(-1) }, icon('back', 26));
         const next = h('button', { class: 'v-nav v-next', 'aria-label': t('next'), onClick: () => step(1) }, icon('chevron', 26));
@@ -719,7 +762,7 @@
             return;
         }
         const zoomer = h('div', { class: 'v-zoom' });
-        const thumb = `/thumb/${row.id}?v=${row.v}`;
+        const thumb = mediaUrl('thumb', row);
         if (row.k === 'i') {
             const low = h('img', { class: 'v-img v-low', alt: '', draggable: false, src: thumb });
             const full = h('img', { class: 'v-img v-full', alt: row.n, draggable: false, decoding: 'async' });
@@ -731,13 +774,13 @@
                 full.remove();
                 slide.appendChild(h('div', { class: 'v-note' }, t('cantShow')));
             }, { once: true });
-            full.src = `/preview/${row.id}?v=${row.v}`;
+            full.src = mediaUrl('preview', row);
             zoomer.append(low, full);
         } else if (row.k === 'v') {
             if (isCurrent) {
                 zoomer.appendChild(h('video', {
                     class: 'v-video', controls: true, playsInline: true, preload: 'metadata',
-                    poster: thumb, src: `/file/${row.id}`,
+                    poster: thumb, src: fileUrl(row.id),
                 }));
             } else {
                 zoomer.append(h('img', { class: 'v-img', alt: '', draggable: false, src: thumb }),
@@ -747,8 +790,8 @@
             zoomer.appendChild(h('div', { class: 'v-file' },
                 icon('file', 56),
                 h('div', { class: 'v-file-name' }, `${row.n}.${row.e}`),
-                row.k === 'a' && isCurrent && h('audio', { controls: true, preload: 'none', src: `/file/${row.id}` }),
-                h('a', { class: 'btn-primary', href: `/file/${row.id}?dl=1`, download: `${row.n}.${row.e}` },
+                row.k === 'a' && isCurrent && h('audio', { controls: true, preload: 'none', src: fileUrl(row.id) }),
+                h('a', { class: 'btn-primary', href: fileUrl(row.id, true), download: `${row.n}.${row.e}` },
                     icon('download', 18), t('download'))));
         }
         slide.appendChild(zoomer);
@@ -1047,12 +1090,228 @@
                 ? h('a', { class: 'info-link', href: item.url, target: '_blank', rel: 'noopener noreferrer' }, item.url)
                 : h('span', { class: 'info-note' }, item.url)),
             h('div', { class: 'info-actions' },
-                h('a', { class: 'btn-primary', href: `/file/${item.id}?dl=1`, download: `${item.name}.${item.ext}` },
+                h('a', { class: 'btn-primary', href: fileUrl(item.id, true), download: `${item.name}.${item.ext}` },
                     icon('download', 18), t('download')),
-                h('a', { class: 'btn-secondary', href: `/file/${item.id}`, target: '_blank', rel: 'noopener' },
+                h('a', { class: 'btn-secondary', href: fileUrl(item.id), target: '_blank', rel: 'noopener' },
                     icon('open', 18), t('openOriginal'))),
         ];
         body.replaceChildren(...rows.filter(Boolean));
+    }
+
+    // ───────────────────────── library switcher ─────────────────────────
+    async function switchLibrary(id) {
+        if (id === prefs.lib) return;
+        setPrefs({ lib: id });
+        state.scrollMemory.clear();
+        state.lib = null;
+        // Empty the grid at once: nothing of the previous library may stay on screen.
+        state.generation++;
+        state.total = 0;
+        state.rows = [];
+        state.pages = new Map();
+        for (const node of grid.nodes.values()) node.remove();
+        grid.nodes.clear();
+        layoutGrid();
+        el.empty.hidden = true;
+        el.chips.hidden = true;
+        if (location.hash !== '#/all') history.replaceState(null, '', '#/all');
+        try {
+            await loadLibrary();
+        } catch (err) {
+            showLoadError(err);
+            return;
+        }
+        await onRoute(false);
+    }
+    async function openLibrarySheet() {
+        let libraries = [];
+        try {
+            libraries = (await api('/api/libraries')).libraries;
+        } catch (err) {
+            showLoadError(err);
+            return;
+        }
+        const pick = (id) => navigateThen(() => switchLibrary(id));
+        const row = (id, name, note, selected) => h('button', { class: `lib-row${selected ? ' active' : ''}`, onClick: () => pick(id) },
+            h('span', { class: 'lib-text' }, h('span', { class: 'lib-name' }, name), note && h('span', { class: 'lib-note' }, note)),
+            selected && icon('check', 18));
+        const body = h('div', { class: 'lib-list' },
+            row('', t('followDesktop'), t('followHint'), prefs.lib === ''),
+            libraries.map((lib) => row(lib.id, lib.name, lib.current ? t('onDesktop') : '', prefs.lib === lib.id)));
+        const show = () => openSheet(t('libraries'), body, { tall: libraries.length > 6 });
+        if (layers.length) {
+            history.back();
+            window.addEventListener('popstate', () => setTimeout(show, 0), { once: true });
+        } else {
+            show();
+        }
+    }
+    /** Close every open layer, then run `action`. */
+    function navigateThen(action) {
+        if (!layers.length) {
+            action();
+            return;
+        }
+        window.addEventListener('popstate', () => setTimeout(action, 0), { once: true });
+        history.go(-layers.length);
+    }
+
+    // ───────────────────────── reading mode ─────────────────────────
+    // Images of the current view stitched into one seamless strip (vertical, or horizontal either way),
+    // for comics and photo sequences. Only blocks near the viewport hold a decoded image.
+    const READ_PAGE = 60;
+    const READ_MODES = ['v', 'l', 'r'];
+    const reader = {
+        open: false, query: '', total: 0, first: 0, last: -1, busy: false, generation: 0,
+        strip: null, counter: null, modeBtn: null, observer: null, frame: 0,
+    };
+    function buildReader() {
+        reader.strip = h('div', { class: 'r-strip' });
+        reader.counter = h('div', { class: 'v-counter' });
+        reader.modeBtn = h('button', { class: 'r-mode', onClick: cycleReaderMode });
+        const top = h('div', { class: 'v-top r-top' },
+            h('button', { class: 'icon-btn', 'aria-label': t('back'), onClick: closeTopLayer }, icon('back')),
+            h('div', { class: 'v-title' }, h('div', { class: 'v-name' }, t('reader')), reader.counter),
+            reader.modeBtn);
+        el.reader.append(reader.strip, top);
+        reader.strip.addEventListener('scroll', () => {
+            if (!reader.frame) reader.frame = requestAnimationFrame(onReaderScroll);
+        }, { passive: true });
+        reader.strip.addEventListener('click', () => el.reader.classList.toggle('chrome-off'));
+    }
+    function readerHorizontal() {
+        return prefs.reader !== 'v';
+    }
+    function applyReaderMode() {
+        el.reader.dataset.mode = prefs.reader;
+        reader.modeBtn.textContent = t({ v: 'readerV', l: 'readerL', r: 'readerR' }[prefs.reader]);
+    }
+    function readerBlock(row, index) {
+        const block = h('div', { class: 'r-item', dataset: { i: String(index), src: mediaUrl('preview', row), thumb: mediaUrl('thumb', row) } });
+        block.style.aspectRatio = `${row.w || 3} / ${row.h || 4}`;
+        reader.observer.observe(block);
+        return block;
+    }
+    function onReaderIntersect(entries) {
+        for (const entry of entries) {
+            const block = entry.target;
+            const img = block.firstChild;
+            if (entry.isIntersecting && !img) {
+                const added = h('img', { alt: '', decoding: 'async' });
+                // A format this browser cannot decode: show Eagle's thumbnail rather than a broken image.
+                added.addEventListener('error', () => {
+                    if (added.isConnected && block.dataset.thumb) added.src = block.dataset.thumb;
+                }, { once: true });
+                added.src = block.dataset.src;
+                block.appendChild(added);
+            } else if (!entry.isIntersecting && img) {
+                img.src = '';
+                img.remove();
+            }
+        }
+    }
+    async function readerFetch(offset) {
+        const data = await api(`/api/items?${reader.query}&offset=${offset}&limit=${READ_PAGE}`);
+        return data.items;
+    }
+    /** Add a page after the loaded range, or before it while keeping what is on screen in place. */
+    async function readerExtend(forward) {
+        if (reader.busy || !reader.open) return;
+        const offset = forward ? reader.last + 1 : Math.max(0, reader.first - READ_PAGE);
+        const count = forward ? READ_PAGE : reader.first - offset;
+        if ((forward && offset >= reader.total) || (!forward && reader.first === 0)) return;
+        reader.busy = true;
+        const generation = reader.generation;
+        try {
+            const rows = (await readerFetch(offset)).slice(0, count);
+            if (generation !== reader.generation || !rows.length) return;
+            const blocks = rows.map((row, i) => readerBlock(row, offset + i));
+            if (forward) {
+                reader.strip.append(...blocks);
+                reader.last = offset + rows.length - 1;
+            } else {
+                const anchor = reader.strip.firstElementChild;
+                const before = anchor.getBoundingClientRect();
+                reader.strip.prepend(...blocks);
+                const after = anchor.getBoundingClientRect();
+                reader.strip.scrollBy(after.left - before.left, after.top - before.top);
+                reader.first = offset;
+            }
+        } catch (err) {
+            if (!(err instanceof ApiError)) console.error(err);
+        } finally {
+            reader.busy = false;
+        }
+    }
+    function readerCurrentBlock() {
+        const rect = reader.strip.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return hit ? hit.closest('.r-item') : null;
+    }
+    function onReaderScroll() {
+        reader.frame = 0;
+        if (!reader.open) return;
+        const block = readerCurrentBlock();
+        if (block) reader.counter.textContent = `${(Number(block.dataset.i) + 1).toLocaleString()} / ${reader.total.toLocaleString()}`;
+        const strip = reader.strip;
+        const horizontal = readerHorizontal();
+        const size = horizontal ? strip.clientWidth : strip.clientHeight;
+        const length = horizontal ? strip.scrollWidth : strip.scrollHeight;
+        const travelled = Math.abs(horizontal ? strip.scrollLeft : strip.scrollTop);
+        if (length - travelled - size < size * 2) readerExtend(true);
+        if (travelled < size * 1.5) readerExtend(false);
+    }
+    function cycleReaderMode(event) {
+        event.stopPropagation();
+        const current = readerCurrentBlock();
+        setPrefs({ reader: READ_MODES[(READ_MODES.indexOf(prefs.reader) + 1) % READ_MODES.length] });
+        applyReaderMode();
+        if (current) current.scrollIntoView({ block: 'start', inline: 'start' });
+        onReaderScroll();
+    }
+    /** @param {object|null} startRow open at this item; null starts from the first image of the view */
+    async function openReader(startRow) {
+        const view = { ...state.view, kind: 'image' };
+        const query = queryString(view);
+        let probe;
+        try {
+            probe = await api(`/api/items?${query}&limit=1${startRow ? `&locate=${startRow.id}` : ''}`);
+        } catch (err) {
+            showLoadError(err);
+            return;
+        }
+        if (!probe.total) {
+            toast(t('readerEmpty'));
+            return;
+        }
+        const start = Math.max(0, probe.index || 0);
+        navigateThen(async () => {
+            reader.generation++;
+            reader.open = true;
+            reader.query = query;
+            reader.total = probe.total;
+            reader.first = Math.floor(start / READ_PAGE) * READ_PAGE;
+            reader.last = reader.first - 1;
+            reader.strip.replaceChildren();
+            if (reader.observer) reader.observer.disconnect();
+            reader.observer = new IntersectionObserver(onReaderIntersect, { root: reader.strip, rootMargin: '150% 150%' });
+            applyReaderMode();
+            el.reader.classList.remove('chrome-off');
+            el.reader.hidden = false;
+            document.body.classList.add('viewing');
+            pushLayer(() => {
+                reader.open = false;
+                reader.generation++;
+                reader.observer.disconnect();
+                reader.strip.replaceChildren();
+                el.reader.hidden = true;
+                document.body.classList.remove('viewing');
+            });
+            await readerExtend(true);
+            const target = reader.strip.querySelector(`.r-item[data-i="${start}"]`);
+            if (target) target.scrollIntoView({ block: 'start', inline: 'start' });
+            onReaderScroll();
+        });
     }
 
     // ───────────────────────── keep in sync with the desktop ─────────────────────────
@@ -1061,8 +1320,8 @@
         try {
             const ping = await api('/api/ping');
             setBanner('');
-            if (ping.version !== state.version || ping.name !== state.lib.name) {
-                const libraryChanged = ping.name !== state.lib.name;
+            if (ping.version !== state.version || ping.id !== state.libId) {
+                const libraryChanged = ping.id !== state.libId;
                 await loadLibrary();
                 if (viewer.open) return;
                 if (libraryChanged) navigate({ scope: 'all', folder: '', tags: [], q: '', kind: '' });
@@ -1070,13 +1329,16 @@
                 toast(t('libraryChanged'));
             }
         } catch (err) {
+            if (err.code === 'library_not_found' && prefs.lib) return switchLibrary('');
             if (err.status !== 401) setBanner(err.status === 503 ? t('unavailable') : t('offline'));
         }
+        return undefined;
     }
 
     async function start() {
         buildSkeleton();
         buildViewer();
+        buildReader();
         if (history.state && history.state.depth) history.replaceState(null, '');
         try {
             await loadLibrary();

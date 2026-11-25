@@ -2,16 +2,17 @@
 
 **English** | [中文](README_zh.md)
 
-An [Eagle](https://eagle.cool) plugin that lets you browse the library currently open in Eagle from your phone — read-only, from anywhere, without copying the library to the phone.
+An [Eagle](https://eagle.cool) plugin that lets you browse your Eagle libraries from your phone — read-only, from anywhere, without copying a library to the phone.
 
 Eagle has no mobile app. RemoteLens runs a small web server inside Eagle and serves a mobile web page: scan a QR code and you are looking at your library.
 
 ## What it does
 
-- **Only the library open in Eagle.** Nothing else on the computer is scanned or reachable. Switch libraries in Eagle and the phone follows.
+- **Only Eagle libraries.** Nothing else on the computer is scanned or reachable. The phone follows the library open in Eagle, and can open any other library Eagle knows without changing what Eagle shows on the computer (this can be switched off, leaving only the open library).
 - **Read-only.** The server accepts no write requests and never modifies the library folder.
 - **On only when you say so.** One switch in the plugin window. Off means no port is open at all.
 - **Eagle's own structure.** Folder tree, tags and tag groups, uncategorized / untagged, search over names, tags, notes and links, sorting, type filter.
+- **Reading mode.** The images of a folder or search stitched into one seamless strip — vertical, or horizontal in either direction — for comics and photo sequences.
 - **Fast on a phone.** Virtualised grid using Eagle's existing thumbnails; full-screen viewer with swipe, pinch and double-tap zoom; videos stream with seeking.
 - **Light previews.** Large images are downsized on demand (and cached outside the library), so a phone on mobile data does not pull 5 MB originals. HEIC and RAW are converted when the system can decode them.
 - **Respects what you hid.** Items in the trash and anything inside a password-protected folder are never served.

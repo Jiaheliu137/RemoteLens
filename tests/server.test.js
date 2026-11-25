@@ -29,7 +29,11 @@ test('http server', async (t) => {
     let context = { library, previews: new PreviewCache({ dir: null }) };
     const config = { token: TOKEN, allowLan: false };
     const server = http.createServer(createApp({
-        getContext: () => context,
+        getContext: (id) => {
+            if (id && id !== 'main') return { status: 'unknown', id };
+            return context ? { status: 'ready', id: 'main', ctx: context } : { status: 'unavailable', id: 'main' };
+        },
+        getLibraries: async () => [{ id: 'main', name: 'Sample', current: true }],
         getConfig: () => config,
         webDir: path.join(__dirname, '..', 'RemoteLens', 'web'),
     }));
@@ -111,6 +115,11 @@ test('http server', async (t) => {
         context = null;
         assert.equal((await authed('/api/library')).status, 503);
         context = saved;
+        assert.equal((await authed('/api/library?lib=other')).status, 404);
+        assert.equal((await authed('/thumb/A1?lib=other')).status, 404);
+        assert.deepEqual(JSON.parse((await authed('/api/libraries')).body).libraries.map((l) => l.id), ['main']);
+        assert.equal((await get('/api/libraries')).status, 401);
+        assert.equal(JSON.parse((await authed('/api/items?scope=all&sort=created&locate=A3')).body).index, 2);
     });
 
     await t.test('a new token signs every device out', async () => {

@@ -2,15 +2,14 @@
 /**
  * Run the RemoteLens server without Eagle, for development:
  *
- *   node tools/dev-server.js "D:\path\to\My.library" [port]
+ *   node tools/dev-server.js "D:\path\to\My.library" [port] [more.library ...]
  *
  * Binds to 127.0.0.1 only. No preview converter is available outside Eagle, so large images
  * and HEIC files are served as originals. The token is printed on start.
  */
 const path = require('path');
 const os = require('os');
-const { Library } = require('../RemoteLens/server/library');
-const { PreviewCache } = require('../RemoteLens/server/previews');
+const { LibraryPool } = require('../RemoteLens/server/pool');
 const { createApp, Listener, newToken } = require('../RemoteLens/server/index');
 
 async function main() {
@@ -21,13 +20,14 @@ async function main() {
         process.exit(1);
     }
     const log = (level, message) => console.log(`[${level}] ${message}`);
-    const cacheDir = path.join(os.tmpdir(), 'remotelens-dev');
-    const library = new Library(libraryPath, { cacheDir, log });
-    await library.load();
-    library.watch();
+    const pool = new LibraryPool({ cacheRoot: path.join(os.tmpdir(), 'remotelens-dev'), previewBytes: 0, log });
+    pool.setKnown(libraryPath, process.argv.slice(4));
+    const first = await pool.ready('');
+    if (first.status !== 'ready') throw new Error(`cannot open ${libraryPath}: ${first.error || first.status}`);
     const token = process.env.REMOTELENS_TOKEN || newToken();
     const app = createApp({
-        getContext: () => ({ library, previews: new PreviewCache({ dir: null }) }),
+        getContext: (id) => pool.get(id),
+        getLibraries: async () => pool.list(),
         getConfig: () => ({ token, allowLan: false }),
         webDir: path.join(__dirname, '..', 'RemoteLens', 'web'),
         log,

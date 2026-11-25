@@ -94,7 +94,9 @@ function listRow(item) {
 
 /**
  * @param {object} deps
- *   getContext(): {library, previews}|null   current library (null while disabled or unavailable)
+ *   getContext(id): {status:'ready'|'loading'|'unavailable'|'unknown', id, ctx:{library, previews}}
+ *                   id '' selects the library open in Eagle
+ *   getLibraries(): Promise<{id, name, current}[]>   libraries a client may switch to
  *   getConfig(): {token, allowLan}
  *   webDir: folder with the mobile web app
  *   log(level, message)
@@ -303,13 +305,14 @@ function createApp(deps) {
         return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
     }
 
-    async function handleApi(req, res, url, ctx) {
+    async function handleApi(req, res, url, ctx, libraryId) {
         const { library } = ctx;
         if (url.pathname === '/api/ping') {
-            return json(req, res, 200, { version: library.version, name: library.name });
+            return json(req, res, 200, { id: libraryId, version: library.version, name: library.name });
         }
         if (url.pathname === '/api/library') {
             return json(req, res, 200, {
+                id: libraryId,
                 name: library.name,
                 version: library.version,
                 counts: library.counts,
@@ -325,7 +328,11 @@ function createApp(deps) {
             const offset = intParam(url, 'offset', 0, 0, Number.MAX_SAFE_INTEGER);
             const limit = intParam(url, 'limit', 200, 1, PAGE_LIMIT_MAX);
             const items = result.ids.slice(offset, offset + limit).map((id) => listRow(library.items.get(id)));
-            return json(req, res, 200, { version: library.version, total: result.total, offset, items });
+            const body = { version: library.version, total: result.total, offset, items };
+            // Position of one item inside this ordering, so a viewer can open at it.
+            const locate = url.searchParams.get('locate');
+            if (locate) body.index = result.ids.indexOf(locate);
+            return json(req, res, 200, body);
         }
         const detail = /^\/api\/item\/([A-Za-z0-9]+)$/.exec(url.pathname);
         if (detail) {
@@ -399,9 +406,16 @@ function createApp(deps) {
             return send(req, res, 401, 'Unauthorized', { 'Content-Type': 'text/plain; charset=utf-8' });
         }
 
-        const ctx = deps.getContext();
-        if (!ctx) return json(req, res, 503, { error: 'library_unavailable' });
-        if (url.pathname.startsWith('/api/')) return handleApi(req, res, url, ctx);
+        if (url.pathname === '/api/libraries') {
+            const libraries = deps.getLibraries ? await deps.getLibraries() : [];
+            return json(req, res, 200, { libraries });
+        }
+        const selected = deps.getContext(String(url.searchParams.get('lib') || ''));
+        if (selected.status === 'unknown') return json(req, res, 404, { error: 'library_not_found' });
+        if (selected.status === 'loading') return json(req, res, 503, { error: 'library_loading' });
+        if (selected.status !== 'ready') return json(req, res, 503, { error: 'library_unavailable' });
+        const { ctx } = selected;
+        if (url.pathname.startsWith('/api/')) return handleApi(req, res, url, ctx, selected.id);
         if (await handleMedia(req, res, url, ctx)) return undefined;
         return send(req, res, 404, 'Not found', { 'Content-Type': 'text/plain; charset=utf-8' });
     }

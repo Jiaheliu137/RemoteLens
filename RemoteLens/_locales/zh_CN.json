@@ -39,10 +39,12 @@
         "errLibraryMissing": "读不到素材库文件夹，所在的磁盘可能没有连接。",
         "errLibrary": "素材库读取失败：{{error}}",
         "connections": "当前连接 {{count}}",
-        "footer": "只读访问 · 只暴露当前打开的素材库 · 切换素材库后自动跟随",
+        "footer": "只读访问 · 手机默认跟随电脑当前打开的素材库",
         "cancel": "取消",
         "ok": "确定",
         "minimize": "最小化",
-        "close": "关闭"
+        "close": "关闭",
+        "allowSwitch": "允许手机切换到其他素材库",
+        "allowSwitchHint": "手机上可以打开 Eagle 里的任意素材库，电脑上的 Eagle 不受影响。关闭后只能看当前打开的库。"
     }
 }

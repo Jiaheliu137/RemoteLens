@@ -54,6 +54,13 @@ async function currentLibraryPath() {
     }
 }
 
+/** Libraries Eagle knows about (its "recent libraries" list), from Eagle's local API. */
+async function listLibraries() {
+    const response = await fetch('http://localhost:41595/api/library/history');
+    const body = await response.json();
+    return Array.isArray(body.data) ? body.data : [];
+}
+
 function showModal(message, { confirmOnly = false } = {}) {
     return new Promise((resolve) => {
         const overlay = $('modalOverlay');
@@ -177,6 +184,7 @@ async function render() {
     $('tokenToggle').textContent = tokenVisible ? t('ui.hide') : t('ui.show');
     if (document.activeElement !== $('port')) $('port').value = state.settings.port;
     $('allowLan').checked = state.settings.allowLan;
+    $('allowSwitch').checked = state.settings.allowSwitch;
     $('connections').textContent = state.running ? t('ui.connections', { count: state.connections }) : '';
     $('cacheSize').textContent = formatBytes(state.previewCacheBytes);
 }
@@ -188,6 +196,7 @@ function bindControls() {
 
     $('enabled').addEventListener('change', (event) => host.update({ enabled: event.target.checked }));
     $('allowLan').addEventListener('change', (event) => host.update({ allowLan: event.target.checked }));
+    $('allowSwitch').addEventListener('change', (event) => host.update({ allowSwitch: event.target.checked }));
     $('tokenToggle').addEventListener('click', () => {
         tokenVisible = !tokenVisible;
         render();
@@ -229,6 +238,7 @@ eagle.onPluginCreate(async (plugin) => {
         host = new Host({
             webDir: path.join(plugin.path, 'web'),
             makePreview: window.RemoteLensPreview.make,
+            listLibraries,
             log,
             onChange: () => render().catch((err) => log('warn', `render failed: ${err.message}`)),
         });

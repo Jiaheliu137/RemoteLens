@@ -8,26 +8,16 @@ const fs = require('fs');
 const fsp = fs.promises;
 const os = require('os');
 const path = require('path');
-const { Library } = require('./library');
-const { PreviewCache } = require('./previews');
+const { LibraryPool } = require('./pool');
 const { createApp, Listener, newToken } = require('./index');
 const net = require('./net');
 const tailscale = require('./tailscale');
 
 const DATA_DIR = path.join(os.homedir(), '.remotelens');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
-const DEFAULTS = { enabled: false, port: 41800, token: '', allowLan: false, previewCacheMB: 2048 };
+const DEFAULTS = { enabled: false, port: 41800, token: '', allowLan: false, allowSwitch: true, previewCacheMB: 2048 };
+const LIBRARY_LIST_TTL_MS = 20000;
 const NETWORK_POLL_MS = 15000;
-
-function simpleHash(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-    return (hash >>> 0).toString(36);
-}
-
-function sanitize(name) {
-    return String(name).replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 40) || 'library';
-}
 
 function validPort(value) {
     const port = Number(value);
@@ -37,16 +27,18 @@ function validPort(value) {
 
 class Host {
     /**
-     * @param {object} o {webDir, makePreview, log, onChange}
+     * @param {object} o {webDir, makePreview, listLibraries: async () => string[], log, onChange}
      */
     constructor(o) {
         this.webDir = o.webDir;
         this.makePreview = o.makePreview || null;
+        this.listLibraries = o.listLibraries || (async () => []);
         this.log = o.log || (() => {});
         this.onChange = o.onChange || (() => {});
         this.settings = { ...DEFAULTS };
         this.libraryPath = '';
-        this.context = null;
+        this.pool = null;
+        this._listedAt = 0;
         this.libraryError = '';
         this.listenError = '';
         this.bound = [];
@@ -56,7 +48,8 @@ class Host {
         this._networkTimer = null;
         this._hostsKey = '';
         this.listener = new Listener(createApp({
-            getContext: () => this.context,
+            getContext: (id) => (this.pool ? this.pool.get(id) : { status: 'unavailable', id: '' }),
+            getLibraries: () => this._libraries(),
             getConfig: () => ({
                 token: this.settings.token,
                 allowLan: this.settings.allowLan,
@@ -75,6 +68,7 @@ class Host {
                 ...DEFAULTS,
                 enabled: saved.enabled === true,
                 allowLan: saved.allowLan === true,
+                allowSwitch: saved.allowSwitch !== false,
                 port: validPort(saved.port) || DEFAULTS.port,
                 token: typeof saved.token === 'string' && saved.token.length >= 12 ? saved.token : '',
                 previewCacheMB: Number(saved.previewCacheMB) > 0 ? Number(saved.previewCacheMB) : DEFAULTS.previewCacheMB,
@@ -104,12 +98,13 @@ class Host {
         return run;
     }
 
-    /** @param {object} patch subset of {enabled, port, allowLan} */
+    /** @param {object} patch subset of {enabled, port, allowLan, allowSwitch} */
     update(patch) {
         return this._enqueue(async () => {
             const next = { ...this.settings };
             if (typeof patch.enabled === 'boolean') next.enabled = patch.enabled;
             if (typeof patch.allowLan === 'boolean') next.allowLan = patch.allowLan;
+            if (typeof patch.allowSwitch === 'boolean') next.allowSwitch = patch.allowSwitch;
             if (patch.port !== undefined) {
                 const port = validPort(patch.port);
                 if (!port) throw new Error(`invalid port: ${patch.port}`);
@@ -117,9 +112,10 @@ class Host {
             }
             const portChanged = next.port !== this.settings.port;
             if (portChanged && this.served) await this._unserve();
+            const switchChanged = next.allowSwitch !== this.settings.allowSwitch;
             this.settings = next;
             await this._saveSettings();
-            await this._apply();
+            await this._apply({ reloadLibrary: switchChanged });
         });
     }
 
@@ -134,7 +130,7 @@ class Host {
     /** Called at start-up and whenever Eagle switches to another library. */
     setLibrary(libraryPath) {
         return this._enqueue(async () => {
-            if (libraryPath === this.libraryPath && this.context) return;
+            if (libraryPath === this.libraryPath && this.pool) return;
             this.libraryPath = libraryPath || '';
             await this._apply({ reloadLibrary: true });
         });
@@ -145,37 +141,49 @@ class Host {
             await this._stop();
             return;
         }
-        if (reloadLibrary || !this.context) await this._openLibrary();
+        if (reloadLibrary || !this.pool) await this._syncLibraries();
         await this._listen();
         this._watchNetwork();
     }
 
-    async _openLibrary() {
-        if (this.context) this.context.library.unwatch();
-        this.context = null;
+    /** Tell the pool which libraries exist, then wait for the one open in Eagle to be indexed. */
+    async _syncLibraries() {
+        if (!this.pool) {
+            this.pool = new LibraryPool({
+                cacheRoot: path.join(DATA_DIR, 'cache'),
+                makePreview: this.makePreview,
+                previewBytes: this.settings.previewCacheMB * 1024 * 1024,
+                log: this.log,
+            });
+        }
+        await this._refreshKnown();
         this.libraryError = '';
         if (!this.libraryPath) {
             this.libraryError = 'no_library';
             return;
         }
-        const cacheDir = path.join(DATA_DIR, 'cache',
-            `${sanitize(path.basename(this.libraryPath).replace(/\.library$/i, ''))}_${simpleHash(this.libraryPath)}`);
-        const library = new Library(this.libraryPath, { cacheDir, log: this.log });
-        try {
-            await library.load();
-        } catch (err) {
-            this.libraryError = err.code === 'ENOENT' ? 'library_missing' : (err.message || 'library_error');
-            this.log('error', `cannot open library ${this.libraryPath}: ${err.message}`);
-            return;
+        const result = await this.pool.ready('');
+        if (result.status !== 'ready') this.libraryError = result.error || 'library_error';
+    }
+
+    async _refreshKnown() {
+        let others = [];
+        if (this.settings.allowSwitch) {
+            try {
+                others = (await this.listLibraries()).filter((item) => typeof item === 'string');
+            } catch (err) {
+                this.log('warn', `library list unavailable: ${err.message}`);
+            }
         }
-        library.watch();
-        const previews = new PreviewCache({
-            dir: path.join(cacheDir, 'previews'),
-            maxBytes: this.settings.previewCacheMB * 1024 * 1024,
-            make: this.makePreview,
-            log: this.log,
-        });
-        this.context = { library, previews };
+        this._listedAt = Date.now();
+        if (this.pool) this.pool.setKnown(this.libraryPath, others);
+    }
+
+    /** Library list for the phone; refreshed now and then so libraries added in Eagle show up. */
+    async _libraries() {
+        if (!this.pool) return [];
+        if (Date.now() - this._listedAt > LIBRARY_LIST_TTL_MS) await this._refreshKnown();
+        return this.pool.list();
     }
 
     /** HTTPS port published inside the tailnet; kept apart from the plain HTTP port to avoid any clash. */
@@ -241,8 +249,8 @@ class Host {
         await this.listener.close();
         this.bound = [];
         this.listenError = '';
-        if (this.context) this.context.library.unwatch();
-        this.context = null;
+        if (this.pool) this.pool.closeAll();
+        this.pool = null;
     }
 
     /** Stop everything without changing the saved "enabled" preference (Eagle is quitting). */
@@ -252,7 +260,7 @@ class Host {
 
     clearPreviewCache() {
         return this._enqueue(async () => {
-            if (this.context) await this.context.previews.clear();
+            if (this.pool) await this.pool.clearPreviews();
         });
     }
 
@@ -272,7 +280,8 @@ class Host {
             for (const ip of direct) urls.push({ kind: 'tailscale-ip', url: `http://${ip}:${port}/` });
             if (this.settings.allowLan) for (const ip of addresses.lan) urls.push({ kind: 'lan', url: `http://${ip}:${port}/` });
         }
-        const library = this.context ? this.context.library : null;
+        const current = this.pool ? this.pool.get('') : null;
+        const library = current && current.status === 'ready' ? current.ctx.library : null;
         return {
             settings: { ...this.settings },
             running,
@@ -283,7 +292,8 @@ class Host {
             tailscale: { ...this.tailscale },
             urls: urls.map((u) => ({ ...u, withToken: `${u.url}?k=${encodeURIComponent(token)}` })),
             connections: this.listener.connections,
-            previewCacheBytes: this.context ? await this.context.previews.size() : 0,
+            previewCacheBytes: this.pool ? await this.pool.previewBytesUsed() : 0,
+            libraryCount: this.pool ? this.pool.list().length : 0,
         };
     }
 }

@@ -5,10 +5,21 @@
     "arch": "all",
     "name": "{{manifest.app.name}}",
     "logo": "/logo.png",
-    "keywords": ["remote", "mobile", "phone", "web", "viewer", "tailscale"],
+    "keywords": [
+        "remote",
+        "phone",
+        "mobile",
+        "web",
+        "viewer",
+        "tailscale"
+    ],
     "devTools": false,
     "fallbackLanguage": "en",
-    "languages": ["en", "zh_CN", "zh_TW"],
+    "languages": [
+        "en",
+        "zh_CN",
+        "zh_TW"
+    ],
     "main": {
         "serviceMode": true,
         "runAfterInstall": true,

@@ -1,7 +1,7 @@
 {
     "manifest": {
         "app": {
-            "name": "RemoteLens 手机远程浏览"
+            "name": "RemoteLens 远程浏览"
         }
     },
     "ui": {

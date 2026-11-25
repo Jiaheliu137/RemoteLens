@@ -71,13 +71,14 @@ button { font: inherit; color: inherit; }
 
 /* ── title bar ── */
 .header {
-    position: relative; min-height: 48px; display: flex; align-items: center; padding: 0 12px;
+    position: relative; min-height: 48px; display: flex; align-items: center; padding: 0 0 0 12px;
     border-bottom: 1px solid var(--color-border-secondary); flex-shrink: 0;
 }
 .drag { -webkit-app-region: drag; flex: 1; display: flex; gap: 8px; align-items: center; height: 48px; min-width: 0; }
 .logo { width: 24px; height: 24px; border-radius: 6px; pointer-events: none; }
 .title { font-weight: var(--font-weight-bold); font-size: 14px; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.action { display: flex; align-items: center; gap: 8px; height: 100%; -webkit-app-region: no-drag; }
+.action { display: flex; align-items: center; height: 100%; -webkit-app-region: no-drag; }
+.action .icon-button + .icon-button { margin-left: 8px; }
 .icon-button {
     width: 24px; height: 24px; padding: 0; border: none; border-radius: 4px; display: flex; align-items: center;
     justify-content: center; cursor: pointer; background-color: transparent; color: var(--color-text-secondary);
@@ -85,11 +86,20 @@ button { font: inherit; color: inherit; }
 }
 .icon-button:hover { background-color: var(--color-bg-hover); color: var(--color-text-primary); }
 .icon-button:active { background-color: var(--color-bg-active); }
-.icon-button.close { margin-left: 4px; }
+.icon-button.active { color: var(--color-primary); background-color: var(--color-bg-active); }
+.titlebar-wnd-btn {
+    width: 46px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+    color: var(--color-text-secondary); transition: background-color 150ms ease; -webkit-app-region: no-drag;
+}
+.titlebar-wnd-btn:hover { background-color: var(--color-bg-active); color: var(--color-text-primary); }
+.titlebar-wnd-btn:active { background-color: var(--color-bg-active); }
+.titlebar-wnd-btn.titlebar-wnd-close:hover { background-color: #e81123; color: #fff; }
+.titlebar-wnd-btn.titlebar-wnd-close:active { background-color: #bf0f1d; color: #fff; }
+#titlebar-minimize { margin-left: 12px; }
 
 /* ── layout ── */
 .body {
-    flex: 1; min-height: 0; display: flex; gap: 16px; padding: 16px; overflow-y: auto;
+    flex: 1; min-height: 0; display: flex; justify-content: center; gap: 16px; padding: 16px; overflow-y: auto;
 }
 .body::-webkit-scrollbar { width: 6px; height: 6px; }
 .body::-webkit-scrollbar-track { background: transparent; }
@@ -99,8 +109,8 @@ button { font: inherit; color: inherit; }
 }
 .body::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 .column { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.column-qr { width: 304px; flex-shrink: 0; }
-.column-main { flex: 1; }
+.column-qr { width: 340px; flex-shrink: 0; }
+.column-main { flex: 1; max-width: 720px; }
 
 .card {
     display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 8px;
@@ -170,7 +180,7 @@ button { font: inherit; color: inherit; }
 /* ── QR and addresses ── */
 .card-qr { align-items: center; gap: 12px; padding: 20px 16px 16px; }
 .qr-box {
-    width: 208px; height: 208px; padding: 8px; border-radius: 8px; background: #ffffff; flex-shrink: 0;
+    width: 248px; height: 248px; padding: 10px; border-radius: 8px; background: #ffffff; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center; border: 1px solid var(--color-border-secondary);
 }
 .qr-box svg { width: 100%; height: 100%; display: block; }

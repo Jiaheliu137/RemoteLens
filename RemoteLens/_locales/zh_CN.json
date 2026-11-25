@@ -57,6 +57,8 @@
         "btnGetTailscale": "下载 Tailscale",
         "btnAdmin": "打开管理后台",
         "btnRecheck": "重新检测",
-        "btnHelp": "使用说明"
+        "btnHelp": "使用说明",
+        "pin": "窗口置顶",
+        "maximize": "最大化"
     }
 }

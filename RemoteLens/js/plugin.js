@@ -37,6 +37,9 @@ function applyStaticText() {
         node.textContent = t(node.dataset.i18n);
     });
     $('titlebar-help').title = t('ui.btnHelp');
+    $('titlebar-pin').title = t('ui.pin');
+    $('titlebar-minimize').title = t('ui.minimize');
+    $('titlebar-maximize').title = t('ui.maximize');
     $('titlebar-close').title = t('ui.close');
 }
 
@@ -284,8 +287,54 @@ async function render() {
     $('cacheSize').textContent = formatBytes(state.previewCacheBytes);
 }
 
+/** Pin, minimize, maximize: the same title-bar controls as the author's other Eagle plugins. */
+function bindWindowControls() {
+    const drag = document.querySelector('.drag');
+    const pin = $('titlebar-pin');
+    let pinned = false;
+    pin.addEventListener('click', () => {
+        pinned = !pinned;
+        eagle.window.setAlwaysOnTop(pinned).then(() => eagle.window.focus()).catch(() => {});
+        pin.classList.toggle('active', pinned);
+        pin.querySelector('.pin-icon-normal').style.display = pinned ? 'none' : '';
+        pin.querySelector('.pin-icon-pinned').style.display = pinned ? '' : 'none';
+    });
+    $('titlebar-minimize').addEventListener('click', () => eagle.window.minimize().catch(() => {}));
+
+    const toggleFullscreen = async () => {
+        try {
+            if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+            else await document.exitFullscreen();
+        } catch (err) {
+            log('warn', `fullscreen unavailable: ${err.message}`);
+        }
+    };
+    $('titlebar-maximize').addEventListener('click', toggleFullscreen);
+    drag.addEventListener('dblclick', toggleFullscreen);
+    document.addEventListener('fullscreenchange', () => {
+        const full = Boolean(document.fullscreenElement);
+        document.querySelector('#titlebar-maximize .maximize-icon').style.display = full ? 'none' : '';
+        document.querySelector('#titlebar-maximize .restore-icon').style.display = full ? '' : 'none';
+        // A drag region swallows mouse events, which would block leaving fullscreen by dragging.
+        drag.style.webkitAppRegion = full ? 'no-drag' : 'drag';
+    });
+    let dragStart = null;
+    drag.addEventListener('mousedown', (event) => {
+        if (document.fullscreenElement) dragStart = { x: event.screenX, y: event.screenY };
+    });
+    document.addEventListener('mousemove', (event) => {
+        if (!dragStart || !document.fullscreenElement) return;
+        if (Math.abs(event.screenX - dragStart.x) > 10 || Math.abs(event.screenY - dragStart.y) > 10) {
+            dragStart = null;
+            document.exitFullscreen().catch(() => {});
+        }
+    });
+    document.addEventListener('mouseup', () => { dragStart = null; });
+}
+
 function bindControls() {
     $('titlebar-help').addEventListener('click', openHelp);
+    bindWindowControls();
     // In service mode closing the window only hides it; the server keeps running in the background.
     $('titlebar-close').addEventListener('click', () => window.close());
 

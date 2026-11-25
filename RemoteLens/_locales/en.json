@@ -57,6 +57,8 @@
         "btnGetTailscale": "Get Tailscale",
         "btnAdmin": "Open admin console",
         "btnRecheck": "Check again",
-        "btnHelp": "Help"
+        "btnHelp": "Help",
+        "pin": "Keep on top",
+        "maximize": "Maximize"
     }
 }

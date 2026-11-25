@@ -369,6 +369,20 @@ class Library {
     }
 
     /**
+     * Formats present in a view, with counts. The view's own format filter is ignored, so the
+     * list shows what could be picked next rather than only what is already picked.
+     * @returns {{ext:string,count:number}[]} most common first
+     */
+    extCounts(q) {
+        const counts = new Map();
+        for (const id of this.query({ ...q, exts: [] }).ids) {
+            const { ext } = this.items.get(id);
+            counts.set(ext, (counts.get(ext) || 0) + 1);
+        }
+        return Array.from(counts, ([ext, count]) => ({ ext, count })).sort((a, b) => b.count - a.count || (a.ext < b.ext ? -1 : 1));
+    }
+
+    /**
      * Width/height ratio of every item of a query, x1000, for laying out a whole view at once.
      * @returns {Buffer} little-endian Uint16 per item (1000 when the size is unknown)
      */

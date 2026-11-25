@@ -171,6 +171,8 @@
         version: 0,
         libId: '',
         stale: false,
+        facetKey: '',
+        facetExts: null,
         scrollMemory: new Map(),
     };
 
@@ -373,6 +375,8 @@
     }
     function onRoute(fromHistory) {
         const view = parseHash();
+        state.facetKey = '';
+        state.facetExts = null;
         if (view.scope === 'folder' && state.lib && !state.folderIndex.has(view.folder)) {
             history.replaceState(null, '', '#/all');
             return onRoute(false);
@@ -788,7 +792,7 @@
                 })))),
             h('div', { class: 'opt-group' },
                 h('div', { class: 'opt-label' }, t('formats')),
-                h('div', { class: 'opt-row' }, ((state.lib && state.lib.exts) || []).slice(0, 24).map((entry) => {
+                h('div', { class: 'opt-row' }, (state.facetExts || (state.lib && state.lib.exts) || []).slice(0, 24).map((entry) => {
                     const on = state.view.exts.includes(entry.ext);
                     return h('button', {
                         class: `opt${on ? ' active' : ''}`,
@@ -808,6 +812,15 @@
     }
     function openSortSheet() {
         openSheet(t('view'), renderSortSheet());
+        // Format counts are for what is on screen now (this folder, these filters), not the whole library.
+        const key = queryString(state.view);
+        if (state.facetKey === key) return;
+        api(`/api/facets?${key}`).then((data) => {
+            state.facetKey = key;
+            state.facetExts = data.exts;
+            const body = el.sheet.querySelector('.sheet-body');
+            if (!el.sheet.hidden && body && queryString(state.view) === key) body.replaceChildren(renderSortSheet());
+        }).catch(() => { /* an older server has no facets: keep the library-wide counts */ });
     }
     function openTagSheet() {
         const lib = state.lib;

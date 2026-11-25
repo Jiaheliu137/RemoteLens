@@ -64,6 +64,9 @@ test('library index', async (t) => {
         assert.deepEqual(library.query({ ...base, color: 0xe02020 }).ids, ['A1']);
         assert.equal(library.query({ ...base, color: 0x20e020 }).total, 0);
         assert.deepEqual(library.exts.map((e) => e.ext).sort(), ['heic', 'jpg', 'mov', 'png', 'svg']);
+        assert.deepEqual(library.extCounts({ ...base, scope: 'folder', folder: 'TOKYO', exts: ['png'] }),
+            [{ ext: 'jpg', count: 1 }, { ext: 'mov', count: 1 }]);
+        assert.deepEqual(library.extCounts({ ...base, kind: 'video' }), [{ ext: 'mov', count: 1 }]);
         const ratios = library.ratios({ ...base, exts: ['png', 'mov'] });
         assert.deepEqual([ratios.readUInt16LE(0), ratios.readUInt16LE(2)], [500, 1333]);
     });

@@ -346,6 +346,11 @@ function createApp(deps) {
             if (locate) body.index = result.ids.indexOf(locate);
             return json(req, res, 200, body);
         }
+        if (url.pathname === '/api/facets') {
+            const q = parseQuery(url, library);
+            if (!q) return json(req, res, 404, { error: 'folder_not_found' });
+            return json(req, res, 200, { exts: library.extCounts(q) });
+        }
         if (url.pathname === '/api/ratios') {
             const q = parseQuery(url, library);
             if (!q) return json(req, res, 404, { error: 'folder_not_found' });

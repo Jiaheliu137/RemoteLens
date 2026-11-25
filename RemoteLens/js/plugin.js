@@ -3,11 +3,7 @@
 
 const path = require('path');
 
-const EAGLE_THEME_MAP = {
-    LIGHT: 'theme-light', LIGHTGRAY: 'theme-lightgray', GRAY: 'theme-gray',
-    DARK: 'theme-dark', BLUE: 'theme-blue', PURPLE: 'theme-purple',
-};
-const ALL_THEMES = Object.values(EAGLE_THEME_MAP);
+const EAGLE_THEME_MAP = { LIGHT: 'light', LIGHTGRAY: 'lightgray', GRAY: 'gray', DARK: 'dark', BLUE: 'blue', PURPLE: 'purple' };
 const REFRESH_MS = 3000;
 
 let host = null;
@@ -28,11 +24,12 @@ function log(level, message) {
     }
 }
 
+/** Eagle's own plugins carry the theme as attributes on <html>; the stylesheet keys on them. */
 function syncEagleTheme() {
     if (typeof eagle === 'undefined' || !eagle.app) return;
-    const themeClass = EAGLE_THEME_MAP[eagle.app.theme] || (eagle.app.isDarkColors() ? 'theme-gray' : 'theme-light');
-    ALL_THEMES.forEach((name) => document.body.classList.remove(name));
-    document.body.classList.add(themeClass);
+    const root = document.documentElement;
+    root.setAttribute('theme', EAGLE_THEME_MAP[eagle.app.theme] || (eagle.app.isDarkColors() ? 'gray' : 'light'));
+    root.setAttribute('platform', eagle.app.platform || 'win32');
 }
 
 function applyStaticText() {
@@ -40,7 +37,6 @@ function applyStaticText() {
         node.textContent = t(node.dataset.i18n);
     });
     $('titlebar-help').title = t('ui.btnHelp');
-    $('titlebar-minimize').title = t('ui.minimize');
     $('titlebar-close').title = t('ui.close');
 }
 
@@ -105,7 +101,11 @@ async function copyText(text, button) {
     const original = button.dataset.label || button.textContent;
     button.dataset.label = original;
     button.textContent = t('ui.copied');
-    setTimeout(() => { button.textContent = original; }, 1500);
+    button.classList.add('is-done');
+    setTimeout(() => {
+        button.textContent = original;
+        button.classList.remove('is-done');
+    }, 1500);
 }
 
 function urlLabel(kind) {
@@ -153,7 +153,7 @@ function renderUrls(state) {
             renderUrls(lastState);
         };
         const copy = document.createElement('button');
-        copy.className = 'btn-secondary';
+        copy.className = 'button-small';
         copy.textContent = t('ui.copy');
         copy.onclick = () => copyText(entry.url, copy);
         row.append(main, copy);
@@ -247,7 +247,7 @@ function renderGuide(guide) {
         row.className = 'notice-actions';
         for (const action of guide.actions) {
             const button = document.createElement('button');
-            button.className = 'btn-secondary';
+            button.className = 'button-small';
             button.textContent = action.label;
             button.onclick = action.run;
             row.appendChild(button);
@@ -286,7 +286,6 @@ async function render() {
 
 function bindControls() {
     $('titlebar-help').addEventListener('click', openHelp);
-    $('titlebar-minimize').addEventListener('click', () => eagle.window.minimize().catch(() => {}));
     // In service mode closing the window only hides it; the server keeps running in the background.
     $('titlebar-close').addEventListener('click', () => window.close());
 

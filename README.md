@@ -6,7 +6,7 @@ Browse your [Eagle](https://eagle.cool) library from your phone — anywhere, re
 
 Eagle has no mobile app. RemoteLens is an Eagle plugin that serves the library open in Eagle as a mobile web page. Scan a QR code and you are in.
 
-<img src="docs/window-en.png" width="320" alt="The RemoteLens plugin window">
+<img src="docs/window-en.png" width="640" alt="The RemoteLens plugin window">
 
 ## What you need
 

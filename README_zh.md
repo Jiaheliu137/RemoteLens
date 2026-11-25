@@ -6,7 +6,7 @@
 
 Eagle 没有手机端。RemoteLens 是一个 Eagle 插件，把 Eagle 当前打开的素材库做成一个手机网页，扫一下二维码就能用。
 
-<img src="docs/window-zh.png" width="320" alt="RemoteLens 插件窗口">
+<img src="docs/window-zh.png" width="640" alt="RemoteLens 插件窗口">
 
 ## 需要准备什么
 

@@ -25,13 +25,10 @@
         "frame": false,
         "vibrancy": true,
         "url": "index.html",
-        "width": 420,
-        "height": 780,
-        "minWidth": 380,
-        "minHeight": 560,
-        "maxWidth": 560,
-        "resizable": true,
-        "maximizable": false,
-        "fullscreenable": false
+        "width": 820,
+        "height": 560,
+        "minWidth": 760,
+        "minHeight": 520,
+        "resizable": true
     }
 }

@@ -5,106 +5,129 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RemoteLens</title>
     <script>
+    // Set the theme before the first paint so the window never flashes the wrong colours.
     (function () {
-        if (typeof eagle === 'undefined' || !eagle.app) return;
-        var colors = { LIGHT: '#ffffff', LIGHTGRAY: '#e3e4e6', GRAY: '#37383c', DARK: '#18191c', BLUE: '#0d1630', PURPLE: '#1c1424' };
-        var bg = colors[eagle.app.theme] || (eagle.app.isDarkColors() ? '#37383c' : '#ffffff');
-        document.documentElement.style.backgroundColor = bg;
-        document.documentElement.style.setProperty('--initial-bg', bg);
+        var root = document.documentElement;
+        var names = { LIGHT: 'light', LIGHTGRAY: 'lightgray', GRAY: 'gray', DARK: 'dark', BLUE: 'blue', PURPLE: 'purple' };
+        var theme = 'light';
+        var platform = 'win32';
+        if (typeof eagle !== 'undefined' && eagle.app) {
+            theme = names[eagle.app.theme] || (eagle.app.isDarkColors() ? 'gray' : 'light');
+            platform = eagle.app.platform || platform;
+        }
+        root.setAttribute('theme', theme);
+        root.setAttribute('platform', platform);
     })();
     </script>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="theme-light">
-    <div id="titlebar">
-        <div id="titlebar-drag">
-            <img id="titlebar-logo" src="logo.png" alt="">
-            <span id="titlebar-title">RemoteLens</span>
-        </div>
-        <div id="titlebar-actions">
-            <div class="titlebar-wnd-btn" id="titlebar-help">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor"/><path d="M5.3 5.4a1.8 1.8 0 1 1 2.6 1.6c-.6.3-.9.7-.9 1.3" stroke="currentColor" stroke-linecap="round"/><circle cx="7" cy="10.3" r=".7" fill="currentColor"/></svg>
-            </div>
-            <div class="titlebar-wnd-btn" id="titlebar-minimize">
-                <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg>
-            </div>
-            <div class="titlebar-wnd-btn titlebar-wnd-close" id="titlebar-close">
-                <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-            </div>
-        </div>
-    </div>
-
+<body>
     <div id="app">
-        <section class="panel panel-main">
-            <div class="main-text">
-                <div class="main-title" data-i18n="ui.access"></div>
-                <div class="main-status" id="status"></div>
+        <header class="header">
+            <div class="drag">
+                <img class="logo" src="logo.png" alt="">
+                <span class="title">RemoteLens</span>
             </div>
-            <label class="switch">
-                <input type="checkbox" id="enabled">
-                <span class="switch-track"></span>
-            </label>
-        </section>
+            <div class="action">
+                <button class="icon-button" id="titlebar-help">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7.25" stroke="currentColor" stroke-width="1.5"/><path d="M9.9 10.1a2.2 2.2 0 1 1 3.2 2c-.75.4-1.1.85-1.1 1.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="16.1" r=".95" fill="currentColor"/></svg>
+                </button>
+                <button class="icon-button close" id="titlebar-close">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7.5 7.5l9 9M16.5 7.5l-9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+            </div>
+        </header>
 
-        <div class="notice" id="notice" hidden></div>
+        <main class="body">
+            <div class="column column-qr">
+                <section class="card card-qr">
+                    <div class="qr-box qr-empty" id="qr"></div>
+                    <div class="qr-hint" id="qrHint"></div>
+                    <div class="url-list" id="urls"></div>
+                </section>
+            </div>
 
-        <section class="panel">
-            <div class="row">
-                <span class="label" data-i18n="ui.library"></span>
-                <span class="value" id="library"></span>
-            </div>
-        </section>
+            <div class="column column-main">
+                <section class="card">
+                    <div class="row">
+                        <span class="row-label" data-i18n="ui.access"></span>
+                        <div class="row-controls">
+                            <span class="status-text" id="status"></span>
+                            <span class="divider-vertical"></span>
+                            <label class="switch">
+                                <input type="checkbox" id="enabled">
+                                <span class="switch-track"><span class="switch-knob"></span></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <div class="row">
+                        <span class="row-label" data-i18n="ui.library"></span>
+                        <span class="row-value" id="library"></span>
+                    </div>
+                </section>
 
-        <section class="panel panel-qr" id="qrPanel">
-            <div class="qr-box" id="qr"></div>
-            <div class="qr-hint" id="qrHint"></div>
-            <div class="url-list" id="urls"></div>
-        </section>
+                <div class="notice" id="notice" hidden></div>
 
-        <section class="panel">
-            <div class="row">
-                <span class="label" data-i18n="ui.token"></span>
-                <code class="value mono" id="token"></code>
-                <button class="btn-secondary" id="tokenToggle"></button>
-                <button class="btn-secondary" id="tokenCopy" data-i18n="ui.copy"></button>
-                <button class="btn-secondary" id="tokenReset" data-i18n="ui.reset"></button>
-            </div>
-            <div class="row">
-                <span class="label" data-i18n="ui.port"></span>
-                <input class="input" id="port" type="number" min="1024" max="65534" step="1">
-                <button class="btn-secondary" id="portApply" data-i18n="ui.apply"></button>
-                <span class="value muted right" id="connections"></span>
-            </div>
-            <div class="row">
-                <span class="label" data-i18n="ui.cache"></span>
-                <span class="value" id="cacheSize"></span>
-                <button class="btn-secondary" id="cacheClear" data-i18n="ui.clear"></button>
-            </div>
-            <div class="row row-top">
-                <label class="check">
-                    <input type="checkbox" id="allowSwitch">
-                    <span data-i18n="ui.allowSwitch"></span>
-                </label>
-            </div>
-            <div class="hint" data-i18n="ui.allowSwitchHint"></div>
-            <div class="row">
-                <label class="check">
-                    <input type="checkbox" id="allowLan">
-                    <span data-i18n="ui.allowLan"></span>
-                </label>
-            </div>
-            <div class="hint" data-i18n="ui.allowLanHint"></div>
-        </section>
+                <section class="card">
+                    <div class="row">
+                        <span class="row-label" data-i18n="ui.token"></span>
+                        <div class="row-controls">
+                            <code class="mono" id="token"></code>
+                            <button class="button-small" id="tokenToggle"></button>
+                            <button class="button-small" id="tokenCopy" data-i18n="ui.copy"></button>
+                            <button class="button-small" id="tokenReset" data-i18n="ui.reset"></button>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <span class="row-label" data-i18n="ui.port"></span>
+                        <div class="row-controls">
+                            <span class="caption" id="connections"></span>
+                            <input class="input" id="port" type="number" min="1024" max="65534" step="1">
+                            <button class="button-small" id="portApply" data-i18n="ui.apply"></button>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <span class="row-label" data-i18n="ui.cache"></span>
+                        <div class="row-controls">
+                            <span class="caption" id="cacheSize"></span>
+                            <button class="button-small" id="cacheClear" data-i18n="ui.clear"></button>
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <label class="option">
+                        <span class="option-text">
+                            <span class="option-title" data-i18n="ui.allowSwitch"></span>
+                            <span class="option-hint" data-i18n="ui.allowSwitchHint"></span>
+                        </span>
+                        <span class="switch">
+                            <input type="checkbox" id="allowSwitch">
+                            <span class="switch-track"><span class="switch-knob"></span></span>
+                        </span>
+                    </label>
+                    <label class="option">
+                        <span class="option-text">
+                            <span class="option-title" data-i18n="ui.allowLan"></span>
+                            <span class="option-hint" data-i18n="ui.allowLanHint"></span>
+                        </span>
+                        <span class="switch">
+                            <input type="checkbox" id="allowLan">
+                            <span class="switch-track"><span class="switch-knob"></span></span>
+                        </span>
+                    </label>
+                </section>
 
-        <div class="footer" data-i18n="ui.footer"></div>
+                <div class="footer" data-i18n="ui.footer"></div>
+            </div>
+        </main>
     </div>
 
     <div class="modal-overlay" id="modalOverlay" style="display:none">
         <div class="modal-box">
             <div class="modal-body" id="modalBody"></div>
             <div class="modal-actions">
-                <button class="btn-secondary" id="modalCancel" data-i18n="ui.cancel"></button>
-                <button class="btn-primary" id="modalConfirm" data-i18n="ui.ok"></button>
+                <button class="button" id="modalCancel" data-i18n="ui.cancel"></button>
+                <button class="button button-primary" id="modalConfirm" data-i18n="ui.ok"></button>
             </div>
         </div>
     </div>

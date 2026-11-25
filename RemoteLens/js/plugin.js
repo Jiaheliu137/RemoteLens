@@ -61,6 +61,17 @@ async function listLibraries() {
     return Array.isArray(body.data) ? body.data : [];
 }
 
+/** Make Eagle open another library, exactly as if it had been chosen on the computer. */
+async function switchLibrary(libraryPath) {
+    const response = await fetch('http://localhost:41595/api/library/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ libraryPath }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body.status !== 'success') throw new Error(`Eagle refused to switch (${response.status})`);
+}
+
 function showModal(message, { confirmOnly = false } = {}) {
     return new Promise((resolve) => {
         const overlay = $('modalOverlay');
@@ -239,6 +250,7 @@ eagle.onPluginCreate(async (plugin) => {
             webDir: path.join(plugin.path, 'web'),
             makePreview: window.RemoteLensPreview.make,
             listLibraries,
+            switchLibrary,
             log,
             onChange: () => render().catch((err) => log('warn', `render failed: ${err.message}`)),
         });

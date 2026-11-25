@@ -8,8 +8,8 @@ Eagle has no mobile app. RemoteLens runs a small web server inside Eagle and ser
 
 ## What it does
 
-- **Only Eagle libraries.** Nothing else on the computer is scanned or reachable. The phone follows the library open in Eagle, and can open any other library Eagle knows without changing what Eagle shows on the computer (this can be switched off, leaving only the open library).
-- **Read-only.** The server accepts no write requests and never modifies the library folder.
+- **Always the library Eagle has open.** Nothing else on the computer is scanned or reachable. Switching library on the phone asks Eagle itself to switch, and switching in Eagle moves the phone along: both always show the same library. Switching from the phone can be turned off.
+- **Read-only.** The server never modifies a library; the only thing a phone can change is which library Eagle has open.
 - **On only when you say so.** One switch in the plugin window. Off means no port is open at all.
 - **Eagle's own structure.** Folder tree, tags and tag groups, uncategorized / untagged, search over names, tags, notes and links, sorting.
 - **Filters.** Type, rating, format, shape (landscape / portrait / square) and dominant colour, freely combined.

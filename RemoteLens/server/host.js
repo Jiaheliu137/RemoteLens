@@ -27,12 +27,14 @@ function validPort(value) {
 
 class Host {
     /**
-     * @param {object} o {webDir, makePreview, listLibraries: async () => string[], log, onChange}
+     * @param {object} o {webDir, makePreview, listLibraries: async () => string[],
+     *                    switchLibrary: async (path) => void, log, onChange}
      */
     constructor(o) {
         this.webDir = o.webDir;
         this.makePreview = o.makePreview || null;
         this.listLibraries = o.listLibraries || (async () => []);
+        this.switchLibrary = o.switchLibrary || null;
         this.log = o.log || (() => {});
         this.onChange = o.onChange || (() => {});
         this.settings = { ...DEFAULTS };
@@ -48,7 +50,8 @@ class Host {
         this._networkTimer = null;
         this._hostsKey = '';
         this.listener = new Listener(createApp({
-            getContext: (id) => (this.pool ? this.pool.get(id) : { status: 'unavailable', id: '' }),
+            getContext: () => (this.pool ? this.pool.get('') : { status: 'unavailable', id: '' }),
+            switchLibrary: (id) => this._switchTo(id),
             getLibraries: () => this._libraries(),
             getConfig: () => ({
                 token: this.settings.token,
@@ -177,6 +180,20 @@ class Host {
         }
         this._listedAt = Date.now();
         if (this.pool) this.pool.setKnown(this.libraryPath, others);
+    }
+
+    /**
+     * Ask Eagle itself to open another library. Eagle then reports the change like any switch made
+     * on the computer, and every phone follows.
+     * @returns {Promise<boolean>} false when the id is not one of Eagle's libraries
+     */
+    async _switchTo(id) {
+        if (!this.pool || !this.switchLibrary || !this.settings.allowSwitch) return false;
+        await this._refreshKnown();
+        const target = this.pool.known.get(id);
+        if (!target) return false;
+        if (id !== this.pool.currentId) await this.switchLibrary(target);
+        return true;
     }
 
     /** Library list for the phone; refreshed now and then so libraries added in Eagle show up. */

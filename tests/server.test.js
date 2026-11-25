@@ -28,10 +28,14 @@ test('http server', async (t) => {
     await library.load();
     let context = { library, previews: new PreviewCache({ dir: null }) };
     const config = { token: TOKEN, allowLan: false };
+    const switched = [];
     const server = http.createServer(createApp({
-        getContext: (id) => {
-            if (id && id !== 'main') return { status: 'unknown', id };
-            return context ? { status: 'ready', id: 'main', ctx: context } : { status: 'unavailable', id: 'main' };
+        getContext: () => (context ? { status: 'ready', id: 'main', ctx: context } : { status: 'unavailable', id: 'main' }),
+        switchLibrary: async (id) => {
+            if (id === 'broken') throw new Error('eagle is down');
+            if (id !== 'main' && id !== 'second') return false;
+            switched.push(id);
+            return true;
         },
         getLibraries: async () => [{ id: 'main', name: 'Sample', current: true }],
         getConfig: () => config,
@@ -117,11 +121,25 @@ test('http server', async (t) => {
         context = null;
         assert.equal((await authed('/api/library')).status, 503);
         context = saved;
-        assert.equal((await authed('/api/library?lib=other')).status, 404);
-        assert.equal((await authed('/thumb/A1?lib=other')).status, 404);
+        // A library is never chosen by a request parameter: only by what Eagle has open.
+        assert.equal(JSON.parse((await authed('/api/library?lib=other')).body).id, 'main');
         assert.deepEqual(JSON.parse((await authed('/api/libraries')).body).libraries.map((l) => l.id), ['main']);
         assert.equal((await get('/api/libraries')).status, 401);
         assert.equal(JSON.parse((await authed('/api/items?scope=all&sort=created&locate=A3')).body).index, 2);
+    });
+
+    await t.test('asks Eagle to switch libraries only for signed-in, same-site JSON requests', async () => {
+        const post = (id, headers = {}) => request(port, 'POST', '/api/switch', {
+            headers: { 'content-type': 'application/json', cookie, ...headers }, body: JSON.stringify({ id }),
+        });
+        assert.equal((await post('second')).status, 200);
+        assert.deepEqual(switched, ['second']);
+        assert.equal((await post('nope')).status, 404);
+        assert.equal((await post('broken')).status, 502);
+        assert.equal((await post('second', { cookie: '' })).status, 401);
+        assert.equal((await post('second', { 'content-type': 'text/plain' })).status, 400);
+        assert.equal((await post('second', { 'sec-fetch-site': 'cross-site' })).status, 400);
+        assert.deepEqual(switched, ['second']);
     });
 
     await t.test('a new token signs every device out', async () => {

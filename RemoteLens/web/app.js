@@ -24,9 +24,10 @@
         filterTags: ['筛选标签', 'Filter tags'], noTags: ['没有标签', 'No tags'], ungrouped: ['未分组', 'Ungrouped'],
         allTags: ['全部标签', 'All tags'], close: ['关闭', 'Close'], menu: ['菜单', 'Menu'], back: ['返回', 'Back'],
         prev: ['上一个', 'Previous'], next: ['下一个', 'Next'], libraryChanged: ['素材库有更新，已刷新', 'Library updated'],
-        libraries: ['素材库', 'Libraries'], followDesktop: ['跟随电脑', 'Follow the computer'],
-        followHint: ['电脑上的 Eagle 打开哪个库，这里就显示哪个', 'Shows whichever library Eagle has open on the computer'],
-        onDesktop: ['电脑当前', 'Open on computer'], opening: ['正在打开素材库，首次打开大的库需要一点时间…', 'Opening the library. A large one takes a moment the first time…'],
+        libraries: ['素材库', 'Libraries'],
+        switchHint: ['切换后，电脑上的 Eagle 也会一起切换', 'Eagle on the computer switches too'],
+        switching: ['正在切换素材库…', 'Switching library…'], switchFailed: ['切换失败，请在电脑上确认 Eagle 正常运行', 'Could not switch. Check that Eagle is running on the computer.'],
+        onDesktop: ['当前', 'Current'], opening: ['正在打开素材库，首次打开大的库需要一点时间…', 'Opening the library. A large one takes a moment the first time…'],
         reader: ['阅读模式', 'Reading mode'], readerV: ['竖向', 'Vertical'], readerL: ['横向 →', 'Horizontal →'], readerR: ['横向 ←', 'Horizontal ←'],
         readerEmpty: ['这里没有可以连续阅读的图片', 'No images to read here'],
         layout: ['布局', 'Layout'], layoutGrid: ['方格', 'Squares'], layoutJust: ['自适应', 'Justified'],
@@ -109,7 +110,7 @@
     }) : '');
 
     const PREF_KEY = 'remotelens.prefs.v1';
-    const DEFAULT_PREFS = { sort: 'added', order: 'desc', cols: 0, recursive: true, expanded: {}, lib: '', reader: 'v', layout: 'grid' };
+    const DEFAULT_PREFS = { sort: 'added', order: 'desc', cols: 0, recursive: true, expanded: {}, reader: 'v', layout: 'grid' };
     function loadPrefs() {
         try {
             return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREF_KEY) || '{}') };
@@ -132,16 +133,13 @@
             this.code = code || '';
         }
     }
-    /** Add the chosen library to a URL; '' means "whatever Eagle has open", which needs no parameter. */
-    function withLib(url) {
-        return prefs.lib ? `${url}${url.includes('?') ? '&' : '?'}lib=${encodeURIComponent(prefs.lib)}` : url;
-    }
-    const mediaUrl = (kind, row) => withLib(`/${kind}/${row.id}?v=${row.v}`);
-    const fileUrl = (id, download) => withLib(`/file/${id}${download ? '?dl=1' : ''}`);
+    // Media URLs carry the library id only to keep caches apart: the same item id may exist in two libraries.
+    const mediaUrl = (kind, row) => `/${kind}/${row.id}?v=${row.v}&l=${state.libId}`;
+    const fileUrl = (id, download) => `/file/${id}?l=${state.libId}${download ? '&dl=1' : ''}`;
     async function api(path) {
         let res;
         try {
-            res = await fetch(withLib(path), { credentials: 'same-origin', cache: 'no-store' });
+            res = await fetch(path, { credentials: 'same-origin', cache: 'no-store' });
         } catch {
             throw new ApiError(0);
         }
@@ -159,7 +157,7 @@
 
     // ───────────────────────── state ─────────────────────────
     /** Must match API_VERSION in server/index.js. */
-    const CLIENT_API = 3;
+    const CLIENT_API = 4;
     const PAGE = 150;
     const GAP = 2;
     const state = {
@@ -347,8 +345,6 @@
                     el.subtitle.textContent = '';
                     setBanner(t('opening'));
                     await sleep(800);
-                } else if (err.code === 'library_not_found' && prefs.lib) {
-                    setPrefs({ lib: '' });
                 } else {
                     throw err;
                 }
@@ -480,7 +476,7 @@
     }
     async function fetchRatios(generation) {
         try {
-            const res = await fetch(withLib(`/api/ratios?${queryString(state.view)}`), { credentials: 'same-origin', cache: 'no-store' });
+            const res = await fetch(`/api/ratios?${queryString(state.view)}`, { credentials: 'same-origin', cache: 'no-store' });
             if (!res.ok || generation !== state.generation) return;
             grid.ratios = new Uint16Array(await res.arrayBuffer());
         } catch {
@@ -1264,9 +1260,8 @@
     }
 
     // ───────────────────────── library switcher ─────────────────────────
-    async function switchLibrary(id) {
-        if (id === prefs.lib) return;
-        setPrefs({ lib: id });
+    /** Drop everything on screen and show the library Eagle has open now. */
+    async function reloadForLibrary() {
         state.scrollMemory.clear();
         state.lib = null;
         // Empty the grid at once: nothing of the previous library may stay on screen.
@@ -1288,6 +1283,32 @@
         }
         await onRoute(false);
     }
+    /** Ask Eagle on the computer to open another library, then follow it. */
+    async function switchLibrary(id) {
+        if (id === state.libId) return;
+        el.title.textContent = t('libraries');
+        el.subtitle.textContent = '';
+        setBanner(t('switching'));
+        try {
+            const res = await fetch('/api/switch', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+            });
+            if (!res.ok) throw new ApiError(res.status);
+        } catch {
+            setBanner(t('switchFailed'));
+            el.title.textContent = viewTitle(state.view);
+            return;
+        }
+        // Eagle needs a moment to open the library and tell the plugin.
+        for (let attempt = 0; attempt < 40; attempt++) {
+            await sleep(400);
+            try {
+                if ((await api('/api/ping')).id === id) break;
+            } catch { /* still opening */ }
+        }
+        await reloadForLibrary();
+    }
     async function openLibrarySheet() {
         let libraries = [];
         try {
@@ -1296,13 +1317,12 @@
             showLoadError(err);
             return;
         }
-        const pick = (id) => navigateThen(() => switchLibrary(id));
-        const row = (id, name, note, selected) => h('button', { class: `lib-row${selected ? ' active' : ''}`, onClick: () => pick(id) },
-            h('span', { class: 'lib-text' }, h('span', { class: 'lib-name' }, name), note && h('span', { class: 'lib-note' }, note)),
-            selected && icon('check', 18));
-        const body = h('div', { class: 'lib-list' },
-            row('', t('followDesktop'), t('followHint'), prefs.lib === ''),
-            libraries.map((lib) => row(lib.id, lib.name, lib.current ? t('onDesktop') : '', prefs.lib === lib.id)));
+        const row = (lib) => h('button', {
+            class: `lib-row${lib.current ? ' active' : ''}`,
+            onClick: () => navigateThen(() => switchLibrary(lib.id)),
+        }, h('span', { class: 'lib-text' }, h('span', { class: 'lib-name' }, lib.name),
+            lib.current && h('span', { class: 'lib-note' }, t('onDesktop'))), lib.current && icon('check', 18));
+        const body = h('div', null, h('div', { class: 'lib-hint' }, t('switchHint')), h('div', { class: 'lib-list' }, libraries.map(row)));
         const show = () => openSheet(t('libraries'), body, { tall: libraries.length > 6 });
         if (layers.length) {
             history.back();
@@ -1487,15 +1507,17 @@
             state.stale = ping.api !== CLIENT_API;
             setBanner(state.stale ? t('stale') : '');
             if (ping.version !== state.version || ping.id !== state.libId) {
-                const libraryChanged = ping.id !== state.libId;
+                if (ping.id !== state.libId) {
+                    // Eagle moved to another library: nothing on screen belongs to it any more.
+                    navigateThen(reloadForLibrary);
+                    return;
+                }
                 await loadLibrary();
-                if (viewer.open) return;
-                if (libraryChanged) navigate({ ...BLANK_VIEW });
+                if (viewer.open || reader.open) return;
                 await onRoute(false);
                 toast(t('libraryChanged'));
             }
         } catch (err) {
-            if (err.code === 'library_not_found' && prefs.lib) return switchLibrary('');
             if (err.status !== 401) setBanner(errorText(err));
         }
         return undefined;
@@ -1514,7 +1536,7 @@
             return;
         }
         await onRoute(false);
-        setInterval(poll, 15000);
+        setInterval(poll, 4000);
         document.addEventListener('visibilitychange', poll);
     }
     start();

@@ -39,12 +39,12 @@
         "errLibraryMissing": "The library folder cannot be read. Its drive may be disconnected.",
         "errLibrary": "Could not read the library: {{error}}",
         "connections": "{{count}} connections",
-        "footer": "Read-only · phones follow the library open on this computer by default",
+        "footer": "Read-only · phones always show the library Eagle has open on this computer",
         "cancel": "Cancel",
         "ok": "OK",
         "minimize": "Minimize",
         "close": "Close",
         "allowSwitch": "Let phones switch libraries",
-        "allowSwitchHint": "Phones can open any library Eagle knows, without changing what Eagle shows on this computer. Off: only the library currently open."
+        "allowSwitchHint": "Switching on a phone switches Eagle on this computer too, and switching here moves the phones along. Off: phones only see the library currently open."
     }
 }

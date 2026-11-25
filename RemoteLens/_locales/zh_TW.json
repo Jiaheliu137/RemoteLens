@@ -39,12 +39,12 @@
         "errLibraryMissing": "讀不到資源庫資料夾，所在的磁碟可能沒有連接。",
         "errLibrary": "資源庫讀取失敗：{{error}}",
         "connections": "目前連線 {{count}}",
-        "footer": "唯讀存取 · 手機預設跟隨電腦目前開啟的資源庫",
+        "footer": "唯讀存取 · 手機顯示的始終是電腦上 Eagle 目前開啟的資源庫",
         "cancel": "取消",
         "ok": "確定",
         "minimize": "最小化",
         "close": "關閉",
-        "allowSwitch": "允許手機切換到其他資源庫",
-        "allowSwitchHint": "手機上可以開啟 Eagle 裡的任意資源庫，電腦上的 Eagle 不受影響。關閉後只能看目前開啟的資源庫。"
+        "allowSwitch": "允許手機切換資源庫",
+        "allowSwitchHint": "在手機上切換資源庫時，電腦上的 Eagle 會一起切換；在電腦上切換，手機也會跟著切換。關閉後手機只能看目前開啟的資源庫。"
     }
 }

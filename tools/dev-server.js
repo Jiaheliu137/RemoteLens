@@ -26,8 +26,15 @@ async function main() {
     if (first.status !== 'ready') throw new Error(`cannot open ${libraryPath}: ${first.error || first.status}`);
     const token = process.env.REMOTELENS_TOKEN || newToken();
     const app = createApp({
-        getContext: (id) => pool.get(id),
+        getContext: () => pool.get(''),
         getLibraries: async () => pool.list(),
+        // No Eagle here: "switching" just changes which of the given libraries counts as open.
+        switchLibrary: async (id) => {
+            const target = pool.known.get(id);
+            if (!target) return false;
+            pool.setKnown(target, Array.from(pool.known.values()));
+            return true;
+        },
         getConfig: () => ({ token, allowLan: false }),
         webDir: path.join(__dirname, '..', 'RemoteLens', 'web'),
         log,

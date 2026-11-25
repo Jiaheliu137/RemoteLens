@@ -19,7 +19,7 @@ const net = require('./net');
  * disk on every request but this code only loads when Eagle starts, so after an update the two can
  * disagree until Eagle is restarted; the client compares this number and says so.
  */
-const API_VERSION = 3;
+const API_VERSION = 4;
 const COOKIE = 'rl_session';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 const LOGIN_WINDOW_MS = 5 * 60 * 1000;
@@ -100,9 +100,9 @@ function listRow(item) {
 
 /**
  * @param {object} deps
- *   getContext(id): {status:'ready'|'loading'|'unavailable'|'unknown', id, ctx:{library, previews}}
- *                   id '' selects the library open in Eagle
- *   getLibraries(): Promise<{id, name, current}[]>   libraries a client may switch to
+ *   getContext(): {status:'ready'|'loading'|'unavailable', id, ctx:{library, previews}}   the library open in Eagle
+ *   getLibraries(): Promise<{id, name, current}[]>   libraries a client may ask Eagle to switch to
+ *   switchLibrary(id): Promise<boolean>   make Eagle itself open that library (false: unknown id)
  *   getConfig(): {token, allowLan}
  *   webDir: folder with the mobile web app
  *   log(level, message)
@@ -405,6 +405,26 @@ function createApp(deps) {
             res.setHeader('Set-Cookie', sessionCookie(client));
             return json(req, res, 200, { ok: true });
         }
+        // The one action that is not a read: asking Eagle to open another library. The library
+        // contents stay read-only; this changes which library Eagle (and therefore the phone) shows.
+        if (url.pathname === '/api/switch' && req.method === 'POST') {
+            if (!isAuthed(req)) return json(req, res, 401, { error: 'unauthorized' });
+            const isJson = /^application\/json\b/i.test(String(req.headers['content-type'] || ''));
+            if (!isJson || isCrossSite(req) || !deps.switchLibrary) return json(req, res, 400, { error: 'bad_request' });
+            let id = '';
+            try {
+                id = String(JSON.parse(await readBody(req)).id || '');
+            } catch (err) {
+                return json(req, res, err.status || 400, { error: 'bad_request' });
+            }
+            try {
+                if (!(await deps.switchLibrary(id))) return json(req, res, 404, { error: 'library_not_found' });
+            } catch (err) {
+                log('error', `library switch failed: ${err.message}`);
+                return json(req, res, 502, { error: 'switch_failed' });
+            }
+            return json(req, res, 200, { ok: true });
+        }
         if (!isRead) return send(req, res, 405, 'Method not allowed', { 'Content-Type': 'text/plain; charset=utf-8', Allow: 'GET, HEAD' });
 
         // A scanned QR code carries the token once; swap it for a cookie and drop it from the address bar.
@@ -427,8 +447,7 @@ function createApp(deps) {
             const libraries = deps.getLibraries ? await deps.getLibraries() : [];
             return json(req, res, 200, { libraries });
         }
-        const selected = deps.getContext(String(url.searchParams.get('lib') || ''));
-        if (selected.status === 'unknown') return json(req, res, 404, { error: 'library_not_found' });
+        const selected = deps.getContext();
         if (selected.status === 'loading') return json(req, res, 503, { error: 'library_loading' });
         if (selected.status !== 'ready') return json(req, res, 503, { error: 'library_unavailable' });
         const { ctx } = selected;

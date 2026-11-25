@@ -278,6 +278,7 @@
             h('button', { class: 'icon-btn menu-btn', 'aria-label': t('menu'), onClick: openDrawer }, icon('menu')),
             h('div', { class: 'title-wrap', onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) }, el.title, el.subtitle),
             h('button', { class: 'icon-btn', 'aria-label': t('search'), onClick: openSearch }, icon('search')),
+            h('button', { class: 'icon-btn', 'aria-label': t('reader'), onClick: () => openReader(null) }, icon('book')),
             h('button', { class: 'icon-btn', 'aria-label': t('sortBy'), onClick: openSortSheet }, icon('sort')));
         el.chips = h('div', { class: 'chips', hidden: true });
         el.banner = h('div', { class: 'banner', hidden: true, role: 'status' });
@@ -772,7 +773,6 @@
         const sorts = ['added', 'created', 'modified', 'name', 'size', 'duration', 'ext'].map((key) => [key, t(key)]);
         const kinds = [['', t('anyType')], ['image', t('image')], ['video', t('video')], ['audio', t('audio')], ['other', t('other')]];
         return h('div', null,
-            h('button', { class: 'btn-secondary sheet-wide', onClick: () => openReader(null) }, icon('book', 18), t('reader')),
             optionGroup(t('sortBy'), sorts, prefs.sort, (sort) => refresh({ sort }, true)),
             optionGroup('', [['desc', t('desc')], ['asc', t('asc')]], prefs.order, (order) => refresh({ order }, true)),
             optionGroup(t('layout'), [['grid', t('layoutGrid')], ['just', t('layoutJust')]], prefs.layout,

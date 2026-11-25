@@ -5,7 +5,7 @@ const http = require('http');
 const path = require('path');
 const { Library } = require('../RemoteLens/server/library');
 const { PreviewCache } = require('../RemoteLens/server/previews');
-const { createApp } = require('../RemoteLens/server/index');
+const { createApp, API_VERSION } = require('../RemoteLens/server/index');
 const { createLibrary, cleanup } = require('./fixture');
 
 const TOKEN = 'test-token-0123456789';
@@ -70,6 +70,8 @@ test('http server', async (t) => {
         assert.match((await authed('/')).body, /app\.js/);
         const lib = JSON.parse((await authed('/api/library')).body);
         assert.equal(lib.name, 'Sample');
+        assert.equal(lib.api, API_VERSION);
+        assert.equal(JSON.parse((await authed('/api/ping')).body).api, API_VERSION);
         assert.equal(lib.counts.all, 6);
         assert.equal(JSON.stringify(lib).includes('Private'), false);
         assert.equal(JSON.stringify(lib).includes('secret-tag'), false);

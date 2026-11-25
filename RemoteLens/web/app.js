@@ -33,6 +33,9 @@
         filter: ['筛选', 'Filter'], anyRating: ['不限', 'Any'], shape: ['形状', 'Shape'], anyShape: ['不限', 'Any'],
         landscape: ['横图', 'Landscape'], portrait: ['竖图', 'Portrait'], square: ['方图', 'Square'],
         color: ['颜色', 'Colour'], formats: ['格式', 'Formats'], clearFilters: ['清除筛选', 'Clear filters'],
+        stale: ['插件已更新，但电脑上的 Eagle 还没重启。请完全退出 Eagle 再打开，然后刷新本页。',
+            'The plugin was updated but Eagle has not been restarted. Quit Eagle completely, open it again, then reload this page.'],
+        failed: ['请求失败（{0}），请刷新页面重试', 'Request failed ({0}). Reload the page and try again.'],
         slideshow: ['幻灯片', 'Slideshow'], stars: ['{0} 星及以上', '{0}+ stars'],
     };
     const t = (key, ...args) => {
@@ -155,6 +158,8 @@
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     // ───────────────────────── state ─────────────────────────
+    /** Must match API_VERSION in server/index.js. */
+    const CLIENT_API = 3;
     const PAGE = 150;
     const GAP = 2;
     const state = {
@@ -167,6 +172,7 @@
         generation: 0,
         version: 0,
         libId: '',
+        stale: false,
         scrollMemory: new Map(),
     };
 
@@ -351,7 +357,8 @@
     }
     async function loadLibrary() {
         const lib = await fetchLibrary();
-        setBanner('');
+        state.stale = lib.api !== CLIENT_API;
+        setBanner(state.stale ? t('stale') : '');
         state.lib = lib;
         state.libId = lib.id;
         state.version = lib.version;
@@ -506,13 +513,21 @@
     function showLoadError(err) {
         if (!(err instanceof ApiError)) console.error(err);
         el.subtitle.textContent = '';
-        setBanner(err.code === 'library_loading' ? t('opening') : (err.status === 503 ? t('unavailable') : t('offline')));
+        setBanner(errorText(err));
+    }
+    /** Only a failed connection is "cannot reach the computer"; anything else is named for what it is. */
+    function errorText(err) {
+        if (state.stale) return t('stale');
+        if (err.code === 'library_loading') return t('opening');
+        if (err.status === 503) return t('unavailable');
+        if (!err.status) return t('offline');
+        return t('failed', err.status);
     }
     async function fetchPage(page, generation = state.generation) {
         if (state.pages.has(page)) return state.pages.get(page);
         const job = api(`/api/items?${queryString(state.view)}&offset=${page * PAGE}&limit=${PAGE}`).then((data) => {
             if (generation !== state.generation) return;
-            setBanner('');
+            setBanner(state.stale ? t('stale') : '');
             state.total = data.total;
             state.version = data.version;
             data.items.forEach((row, i) => { state.rows[data.offset + i] = row; });
@@ -1469,7 +1484,8 @@
         if (document.hidden || !state.lib) return;
         try {
             const ping = await api('/api/ping');
-            setBanner('');
+            state.stale = ping.api !== CLIENT_API;
+            setBanner(state.stale ? t('stale') : '');
             if (ping.version !== state.version || ping.id !== state.libId) {
                 const libraryChanged = ping.id !== state.libId;
                 await loadLibrary();
@@ -1480,7 +1496,7 @@
             }
         } catch (err) {
             if (err.code === 'library_not_found' && prefs.lib) return switchLibrary('');
-            if (err.status !== 401) setBanner(err.status === 503 ? t('unavailable') : t('offline'));
+            if (err.status !== 401) setBanner(errorText(err));
         }
         return undefined;
     }

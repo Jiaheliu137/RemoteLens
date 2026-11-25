@@ -14,6 +14,12 @@ const crypto = require('crypto');
 const { sendFile, mimeOf, sniffImageType } = require('./sendfile');
 const net = require('./net');
 
+/**
+ * Bumped whenever the web client needs something new from the server. The web files are read from
+ * disk on every request but this code only loads when Eagle starts, so after an update the two can
+ * disagree until Eagle is restarted; the client compares this number and says so.
+ */
+const API_VERSION = 3;
 const COOKIE = 'rl_session';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 const LOGIN_WINDOW_MS = 5 * 60 * 1000;
@@ -312,10 +318,11 @@ function createApp(deps) {
     async function handleApi(req, res, url, ctx, libraryId) {
         const { library } = ctx;
         if (url.pathname === '/api/ping') {
-            return json(req, res, 200, { id: libraryId, version: library.version, name: library.name });
+            return json(req, res, 200, { api: API_VERSION, id: libraryId, version: library.version, name: library.name });
         }
         if (url.pathname === '/api/library') {
             return json(req, res, 200, {
+                api: API_VERSION,
                 id: libraryId,
                 name: library.name,
                 version: library.version,
@@ -507,4 +514,4 @@ class Listener {
     }
 }
 
-module.exports = { createApp, Listener, newToken, sessionValue };
+module.exports = { createApp, Listener, newToken, sessionValue, API_VERSION };

@@ -24,6 +24,8 @@ test('library index', async (t) => {
         for (const id of ['T1', 'P1', 'P2', 'X1', 'J1']) assert.equal(library.get(id), null, id);
         assert.ok(library.get('A1'));
         assert.equal(library.folders.byId.has('SECRET'), false);
+        assert.equal(library.folders.byId.get('JAPAN').color, 'red');
+        assert.equal(library.folders.byId.get('TOKYO').color, '');
         assert.equal(library.folders.byId.has('DEEP'), false);
     });
 

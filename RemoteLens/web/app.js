@@ -37,6 +37,7 @@
         stale: ['插件已更新，但电脑上的 Eagle 还没重启。请完全退出 Eagle 再打开，然后刷新本页。',
             'The plugin was updated but Eagle has not been restarted. Quit Eagle completely, open it again, then reload this page.'],
         failed: ['请求失败（{0}），请刷新页面重试', 'Request failed ({0}). Reload the page and try again.'],
+        openFolder: ['打开所在文件夹', 'Open containing folder'],
         slideshow: ['幻灯片', 'Slideshow'], stars: ['{0} 星及以上', '{0}+ stars'],
     };
     const t = (key, ...args) => {
@@ -170,6 +171,7 @@
         generation: 0,
         version: 0,
         libId: '',
+        locateAfterLoad: '',
         stale: false,
         facetKey: '',
         facetExts: null,
@@ -303,7 +305,46 @@
             if (event.key === 'Enter') el.searchInput.blur();
             if (event.key === 'Escape') closeSearch(true);
         });
+        // A long press (or right click) on a picture shows its details without opening it.
+        const press = { timer: 0, fired: false, x: 0, y: 0 };
+        const cancelPress = () => {
+            clearTimeout(press.timer);
+            press.timer = 0;
+        };
+        const showDetails = (cell) => {
+            const row = cell && state.rows[Number(cell.dataset.i)];
+            if (row) openInfoSheet(row);
+        };
+        el.grid.addEventListener('touchstart', (event) => {
+            const cell = event.target.closest('.cell');
+            cancelPress();
+            press.fired = false;
+            if (!cell || event.touches.length !== 1) return;
+            press.x = event.touches[0].clientX;
+            press.y = event.touches[0].clientY;
+            press.timer = setTimeout(() => {
+                press.fired = true;
+                if (navigator.vibrate) navigator.vibrate(8);
+                showDetails(cell);
+            }, 480);
+        }, { passive: true });
+        el.grid.addEventListener('touchmove', (event) => {
+            const touch = event.touches[0];
+            if (Math.abs(touch.clientX - press.x) > 10 || Math.abs(touch.clientY - press.y) > 10) cancelPress();
+        }, { passive: true });
+        el.grid.addEventListener('touchend', cancelPress, { passive: true });
+        el.grid.addEventListener('touchcancel', cancelPress, { passive: true });
+        el.grid.addEventListener('contextmenu', (event) => {
+            const cell = event.target.closest('.cell');
+            if (!cell) return;
+            event.preventDefault();
+            if (!press.fired) showDetails(cell);
+        });
         el.grid.addEventListener('click', (event) => {
+            if (press.fired) {
+                press.fired = false;
+                return;
+            }
             const cell = event.target.closest('.cell');
             if (cell) openViewer(Number(cell.dataset.i));
         });
@@ -403,7 +444,7 @@
             }
             for (const child of hit ? hit.node.children : []) {
                 chips.push(h('button', { class: 'chip', onClick: () => navigate({ ...view, folder: child.id }) },
-                    icon('folder', 14), child.name, h('span', { class: 'chip-count' }, String(child.total))));
+                    folderIcon(child, 14), child.name, h('span', { class: 'chip-count' }, String(child.total))));
             }
         }
         for (const tag of view.tags) {
@@ -510,6 +551,19 @@
         layoutGrid();
         if (restoreScroll) window.scrollTo(0, restoreScroll);
         renderGrid();
+        if (state.locateAfterLoad) {
+            const wanted = state.locateAfterLoad;
+            state.locateAfterLoad = '';
+            try {
+                const found = await api(`/api/items?${queryString(state.view)}&limit=1&locate=${wanted}`);
+                if (generation === state.generation && found.index >= 0) {
+                    scrollToIndex(found.index, 'start');
+                    renderGrid();
+                    const cell = grid.nodes.get(found.index);
+                    if (cell) cell.classList.add('located');
+                }
+            } catch { /* the folder still opened; only the jump to the picture is skipped */ }
+        }
     }
     function showLoadError(err) {
         if (!(err instanceof ApiError)) console.error(err);
@@ -674,6 +728,20 @@
     function goFromDrawer(view) {
         navigate({ ...BLANK_VIEW, ...view });
     }
+    const FOLDER_COLORS = {
+        red: '#e5484d', orange: '#f08c00', yellow: '#dba800', green: '#2f9e44', aqua: '#0ca5b0', blue: '#1c7ed6',
+        purple: '#8e44ad', pink: '#e64980',
+    };
+    /** Folder icon, tinted when the folder has a colour in Eagle. */
+    function folderIcon(node, size) {
+        const svg = icon('folder', size);
+        const colour = node && FOLDER_COLORS[node.color];
+        if (colour) {
+            svg.style.color = colour;
+            svg.classList.add('folder-tinted');
+        }
+        return svg;
+    }
     function renderFolderNodes(nodes, depth, expandedForPath) {
         return nodes.map((node) => {
             const open = Boolean(prefs.expanded[node.id]) || expandedForPath.has(node.id);
@@ -692,7 +760,7 @@
             const row = h('div', { class: `tree-row${active ? ' active' : ''}`, style: `padding-left:${depth * 14}px` },
                 toggle,
                 h('button', { class: 'tree-main', onClick: () => goFromDrawer({ scope: 'folder', folder: node.id }) },
-                    icon('folder', 18), h('span', { class: 'drawer-label' }, node.name),
+                    folderIcon(node, 18), h('span', { class: 'drawer-label' }, node.name),
                     node.total > 0 && h('span', { class: 'drawer-count' }, node.total.toLocaleString())));
             return [row, open && renderFolderNodes(node.children, depth + 1, expandedForPath)];
         });
@@ -709,6 +777,9 @@
             }
         }
         const plain = state.view.tags.length === 0;
+        // Rebuilding the list must not throw the reader back to the top of a long folder tree.
+        const previous = el.drawer.querySelector('.drawer-scroll');
+        const scrollTop = previous ? previous.scrollTop : 0;
         el.drawer.replaceChildren(
             h('div', { class: 'drawer-head' },
                 h('img', { src: '/icon.svg', alt: '', width: 28, height: 28 }),
@@ -724,9 +795,22 @@
                 drawerRow('tag', t('tags'), lib.tags.length, !plain, openTagSheet),
                 h('div', { class: 'drawer-section' }, `${t('folders')} (${state.folderIndex.size})`),
                 renderFolderNodes(lib.folders, 0, pathOpen)));
+        el.drawer.querySelector('.drawer-scroll').scrollTop = scrollTop;
+    }
+    /** Bring the folder being viewed into sight if the list is scrolled somewhere else. */
+    function revealActiveFolder() {
+        const scroller = el.drawer.querySelector('.drawer-scroll');
+        const active = scroller && scroller.querySelector('.tree-row.active');
+        if (!active) return;
+        const box = scroller.getBoundingClientRect();
+        const row = active.getBoundingClientRect();
+        if (row.top < box.top + 8 || row.bottom > box.bottom - 8) {
+            scroller.scrollTop += row.top - box.top - box.height / 2 + row.height / 2;
+        }
     }
     function openDrawer() {
         renderDrawer();
+        revealActiveFolder();
         document.body.classList.add('drawer-open');
         el.scrim.hidden = false;
         pushLayer(() => {
@@ -883,7 +967,6 @@
             h('button', { class: 'icon-btn', 'aria-label': t('back'), onClick: closeTopLayer }, icon('back')),
             h('div', { class: 'v-title' }, viewer.name, viewer.counter),
             (viewer.playBtn = h('button', { class: 'icon-btn', 'aria-label': t('slideshow'), onClick: toggleSlideshow }, icon('play'))),
-            h('button', { class: 'icon-btn', 'aria-label': t('reader'), onClick: () => openReader(currentRow()) }, icon('book')),
             h('button', { class: 'icon-btn', 'aria-label': t('info'), onClick: openInfoSheet }, icon('info')));
         const prev = h('button', { class: 'v-nav v-prev', 'aria-label': t('prev'), onClick: () => step(-1) }, icon('back', 26));
         const next = h('button', { class: 'v-nav v-next', 'aria-label': t('next'), onClick: () => step(1) }, icon('chevron', 26));
@@ -898,7 +981,16 @@
     function currentRow() {
         return state.rows[viewer.index];
     }
+    /** Removing a playing <video> from the page does not silence it on every phone: stop it explicitly. */
+    function stopMedia(root) {
+        for (const media of root.querySelectorAll('video, audio')) {
+            media.pause();
+            media.removeAttribute('src');
+            media.load();
+        }
+    }
     function fillSlide(slide, index, isCurrent) {
+        stopMedia(slide);
         slide.replaceChildren();
         slide.dataset.index = String(index);
         if (index < 0 || index >= state.total) return;
@@ -975,7 +1067,10 @@
         pushLayer(() => {
             viewer.open = false;
             stopSlideshow();
-            viewer.slides.forEach((slide) => slide.replaceChildren());
+            viewer.slides.forEach((slide) => {
+                stopMedia(slide);
+                slide.replaceChildren();
+            });
             el.viewer.hidden = true;
             document.body.classList.remove('viewing');
             scrollToIndex(viewer.index, 'nearest');
@@ -1230,8 +1325,9 @@
     function infoRow(label, value) {
         return h('div', { class: 'info-row' }, h('div', { class: 'info-label' }, label), h('div', { class: 'info-value' }, value));
     }
-    async function openInfoSheet() {
-        const row = currentRow();
+    /** @param {object} [target] a list row; defaults to the picture open in the viewer */
+    async function openInfoSheet(target) {
+        const row = target && typeof target.id === 'string' && target.v ? target : currentRow();
         if (!row) return;
         const body = h('div', { class: 'info' }, h('div', { class: 'empty-inline' }, t('loading')));
         openSheet(t('info'), body, { tall: true });
@@ -1247,6 +1343,10 @@
             onClick: () => navigate({ ...BLANK_VIEW, ...view }),
         }, icon(iconName, 14), label);
         const safeLink = /^https?:\/\//i.test(item.url);
+        const goToFolder = (folder) => {
+            state.locateAfterLoad = item.id;
+            navigate({ ...BLANK_VIEW, scope: 'folder', folder: folder.id });
+        };
         const rows = [
             h('div', { class: 'info-name' }, `${item.name}.${item.ext}`),
             infoRow(t('dimensions'), item.width && item.height ? `${item.width} × ${item.height}` : '—'),
@@ -1256,7 +1356,7 @@
             infoRow(t('added'), formatDate(item.added)),
             item.star > 0 && infoRow(t('rating'), '★'.repeat(item.star)),
             item.folders.length > 0 && infoRow(t('folder'), h('div', { class: 'tag-wrap' },
-                item.folders.map((f) => chipTo(f.name, { scope: 'folder', folder: f.id }, 'folder')))),
+                item.folders.map((f) => h('button', { class: 'chip', onClick: () => goToFolder(f) }, icon('folder', 14), f.name)))),
             item.tags.length > 0 && infoRow(t('tags'), h('div', { class: 'tag-wrap' },
                 item.tags.map((tag) => chipTo(tag, { tags: [tag] }, 'tag')))),
             item.annotation && infoRow(t('note'), h('div', { class: 'info-note' }, item.annotation)),
@@ -1264,7 +1364,9 @@
                 ? h('a', { class: 'info-link', href: item.url, target: '_blank', rel: 'noopener noreferrer' }, item.url)
                 : h('span', { class: 'info-note' }, item.url)),
             h('div', { class: 'info-actions' },
-                h('a', { class: 'btn-primary', href: fileUrl(item.id, true), download: `${item.name}.${item.ext}` },
+                item.folders.length > 0 && h('button', { class: 'btn-primary', onClick: () => goToFolder(item.folders[0]) },
+                    icon('folder', 18), t('openFolder')),
+                h('a', { class: item.folders.length ? 'btn-secondary' : 'btn-primary', href: fileUrl(item.id, true), download: `${item.name}.${item.ext}` },
                     icon('download', 18), t('download')),
                 h('a', { class: 'btn-secondary', href: fileUrl(item.id), target: '_blank', rel: 'noopener' },
                     icon('open', 18), t('openOriginal'))),

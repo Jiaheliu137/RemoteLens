@@ -29,7 +29,7 @@ function createLibrary() {
     const folders = [
         {
             id: 'ROOT', name: 'Trips', password: '', children: [
-                { id: 'JAPAN', name: 'Japan', password: '', children: [{ id: 'TOKYO', name: 'Tokyo', password: '', children: [] }] },
+                { id: 'JAPAN', name: 'Japan', password: '', iconColor: 'red', children: [{ id: 'TOKYO', name: 'Tokyo', password: '', children: [] }] },
                 { id: 'SECRET', name: 'Private', password: 'x', children: [{ id: 'DEEP', name: 'Deep', password: '', children: [] }] },
             ],
         },

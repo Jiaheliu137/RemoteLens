@@ -89,7 +89,9 @@ function readBody(req, limit = 4096) {
 }
 
 function folderTree(nodes) {
-    return nodes.map((n) => ({ id: n.id, name: n.name, count: n.count, total: n.total, children: folderTree(n.children) }));
+    return nodes.map((n) => ({
+        id: n.id, name: n.name, count: n.count, total: n.total, color: n.color || undefined, children: folderTree(n.children),
+    }));
 }
 
 function listRow(item) {

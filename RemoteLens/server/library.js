@@ -131,6 +131,8 @@ function toRecord(meta) {
     };
 }
 
+const FOLDER_COLORS = new Set(['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple', 'pink']);
+
 /** Flatten Eagle's nested folder tree; a folder with a password hides itself and its whole subtree. */
 function buildFolders(rawFolders) {
     const byId = new Map();
@@ -145,7 +147,10 @@ function buildFolders(rawFolders) {
                 walk(raw.children, id, true);
                 continue;
             }
-            const node = { id, name: String(raw.name || ''), parent: parentId, children: [], count: 0, total: 0 };
+            const node = {
+                id, name: String(raw.name || ''), parent: parentId, children: [], count: 0, total: 0,
+                color: FOLDER_COLORS.has(raw.iconColor) ? raw.iconColor : '',
+            };
             byId.set(id, node);
             node.children = walk(raw.children, id, false);
             out.push(node);

@@ -1,6 +1,6 @@
 {
     "name": "remotelens",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "private": true,
     "description": "Eagle plugin: browse the library open in Eagle from your phone, read-only.",
     "license": "MIT",

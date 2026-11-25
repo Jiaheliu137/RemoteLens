@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RemoteLens</title>
+    <script>
+    (function () {
+        if (typeof eagle === 'undefined' || !eagle.app) return;
+        var colors = { LIGHT: '#ffffff', LIGHTGRAY: '#e3e4e6', GRAY: '#37383c', DARK: '#18191c', BLUE: '#0d1630', PURPLE: '#1c1424' };
+        var bg = colors[eagle.app.theme] || (eagle.app.isDarkColors() ? '#37383c' : '#ffffff');
+        document.documentElement.style.backgroundColor = bg;
+        document.documentElement.style.setProperty('--initial-bg', bg);
+    })();
+    </script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-light">
+    <div id="titlebar">
+        <div id="titlebar-drag">
+            <img id="titlebar-logo" src="logo.png" alt="">
+            <span id="titlebar-title">RemoteLens</span>
+        </div>
+        <div id="titlebar-actions">
+            <div class="titlebar-wnd-btn" id="titlebar-minimize">
+                <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg>
+            </div>
+            <div class="titlebar-wnd-btn titlebar-wnd-close" id="titlebar-close">
+                <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            </div>
+        </div>
+    </div>
+
+    <div id="app">
+        <section class="panel panel-main">
+            <div class="main-text">
+                <div class="main-title" data-i18n="ui.access"></div>
+                <div class="main-status" id="status"></div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="enabled">
+                <span class="switch-track"></span>
+            </label>
+        </section>
+
+        <div class="notice" id="notice" hidden></div>
+
+        <section class="panel">
+            <div class="row">
+                <span class="label" data-i18n="ui.library"></span>
+                <span class="value" id="library"></span>
+            </div>
+        </section>
+
+        <section class="panel panel-qr" id="qrPanel">
+            <div class="qr-box" id="qr"></div>
+            <div class="qr-hint" id="qrHint"></div>
+            <div class="url-list" id="urls"></div>
+        </section>
+
+        <section class="panel">
+            <div class="row">
+                <span class="label" data-i18n="ui.token"></span>
+                <code class="value mono" id="token"></code>
+                <button class="btn-secondary" id="tokenToggle"></button>
+                <button class="btn-secondary" id="tokenCopy" data-i18n="ui.copy"></button>
+                <button class="btn-secondary" id="tokenReset" data-i18n="ui.reset"></button>
+            </div>
+            <div class="row">
+                <span class="label" data-i18n="ui.port"></span>
+                <input class="input" id="port" type="number" min="1024" max="65534" step="1">
+                <button class="btn-secondary" id="portApply" data-i18n="ui.apply"></button>
+                <span class="value muted right" id="connections"></span>
+            </div>
+            <div class="row">
+                <span class="label" data-i18n="ui.cache"></span>
+                <span class="value" id="cacheSize"></span>
+                <button class="btn-secondary" id="cacheClear" data-i18n="ui.clear"></button>
+            </div>
+            <div class="row row-top">
+                <label class="check">
+                    <input type="checkbox" id="allowLan">
+                    <span data-i18n="ui.allowLan"></span>
+                </label>
+            </div>
+            <div class="hint" data-i18n="ui.allowLanHint"></div>
+        </section>
+
+        <div class="footer" data-i18n="ui.footer"></div>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay" style="display:none">
+        <div class="modal-box">
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-actions">
+                <button class="btn-secondary" id="modalCancel" data-i18n="ui.cancel"></button>
+                <button class="btn-primary" id="modalConfirm" data-i18n="ui.ok"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/vendor/qrcode.js"></script>
+    <script src="js/preview.js"></script>
+    <script src="js/plugin.js"></script>
+</body>
+</html>

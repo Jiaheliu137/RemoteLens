@@ -1,0 +1,48 @@
+{
+    "manifest": {
+        "app": {
+            "name": "RemoteLens 手機遠端瀏覽"
+        }
+    },
+    "ui": {
+        "access": "遠端存取",
+        "statusOff": "已關閉，手機無法存取",
+        "statusOn": "執行中 · 唯讀",
+        "statusStarting": "啟動中…",
+        "library": "目前資源庫",
+        "items": "{{count}} 個項目",
+        "noLibrary": "未開啟資源庫",
+        "scanHint": "用手機相機掃碼開啟",
+        "offHint": "開啟上方開關後，這裡顯示 QR Code",
+        "noUrl": "沒有可用的存取位址",
+        "urlTailscaleHttps": "Tailscale 加密位址（建議）",
+        "urlTailscaleIp": "Tailscale 直連位址",
+        "urlLan": "區域網路位址",
+        "copy": "複製",
+        "copied": "已複製",
+        "token": "存取密碼",
+        "show": "顯示",
+        "hide": "隱藏",
+        "reset": "重設",
+        "resetConfirm": "重設密碼後，所有已登入的手機都需要重新掃碼。確定重設嗎？",
+        "port": "連接埠",
+        "apply": "套用",
+        "portInvalid": "連接埠需為 1024–65534 之間的整數。",
+        "allowLan": "允許區域網路存取",
+        "allowLanHint": "同一 Wi-Fi 下的裝置可直接連線，但傳輸不加密。公共 Wi-Fi 下不要開啟。",
+        "cache": "預覽快取",
+        "clear": "清除",
+        "noTailscale": "未偵測到 Tailscale。電腦和手機都安裝並登入同一個 Tailscale 帳號後，才能從外部網路存取。",
+        "tailscaleStopped": "Tailscale 沒有在執行，外部網路暫時無法存取。",
+        "tailscaleNoHttps": "這個 Tailscale 網路沒有開啟 HTTPS 憑證，改用直連位址。",
+        "errPort": "連接埠 {{port}} 無法使用（{{error}}），請換一個連接埠。",
+        "errLibraryMissing": "讀不到資源庫資料夾，所在的磁碟可能沒有連接。",
+        "errLibrary": "資源庫讀取失敗：{{error}}",
+        "connections": "目前連線 {{count}}",
+        "footer": "唯讀存取 · 只公開目前開啟的資源庫 · 切換資源庫後自動跟隨",
+        "cancel": "取消",
+        "ok": "確定",
+        "minimize": "最小化",
+        "close": "關閉"
+    }
+}

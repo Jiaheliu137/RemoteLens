@@ -1,0 +1,18 @@
+# Claude Code / OpenCode
+.claude/
+.opencode/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Node
+node_modules/
+*.log
+
+# Eagle writes this next to the manifest
+window-state.json

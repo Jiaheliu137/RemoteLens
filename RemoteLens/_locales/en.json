@@ -1,0 +1,48 @@
+{
+    "manifest": {
+        "app": {
+            "name": "RemoteLens – Remote Viewer"
+        }
+    },
+    "ui": {
+        "access": "Remote access",
+        "statusOff": "Off. Phones cannot connect.",
+        "statusOn": "Running · read-only",
+        "statusStarting": "Starting…",
+        "library": "Current library",
+        "items": "{{count}} items",
+        "noLibrary": "No library open",
+        "scanHint": "Scan with your phone camera",
+        "offHint": "Turn the switch on to show the QR code",
+        "noUrl": "No address available",
+        "urlTailscaleHttps": "Tailscale HTTPS (recommended)",
+        "urlTailscaleIp": "Tailscale direct",
+        "urlLan": "Local network",
+        "copy": "Copy",
+        "copied": "Copied",
+        "token": "Access token",
+        "show": "Show",
+        "hide": "Hide",
+        "reset": "Reset",
+        "resetConfirm": "Resetting the token signs out every phone; each one has to scan the code again. Reset?",
+        "port": "Port",
+        "apply": "Apply",
+        "portInvalid": "The port must be an integer between 1024 and 65534.",
+        "allowLan": "Allow local network",
+        "allowLanHint": "Devices on the same Wi-Fi can connect directly, but unencrypted. Never enable on public Wi-Fi.",
+        "cache": "Preview cache",
+        "clear": "Clear",
+        "noTailscale": "Tailscale was not found. Install it on this computer and your phone, signed in to the same account, to connect from outside your network.",
+        "tailscaleStopped": "Tailscale is not running, so access from outside is unavailable.",
+        "tailscaleNoHttps": "HTTPS certificates are not enabled for this tailnet; using the direct address instead.",
+        "errPort": "Port {{port}} cannot be used ({{error}}). Choose another port.",
+        "errLibraryMissing": "The library folder cannot be read. Its drive may be disconnected.",
+        "errLibrary": "Could not read the library: {{error}}",
+        "connections": "{{count}} connections",
+        "footer": "Read-only · only the library open in Eagle is exposed · follows library switches",
+        "cancel": "Cancel",
+        "ok": "OK",
+        "minimize": "Minimize",
+        "close": "Close"
+    }
+}

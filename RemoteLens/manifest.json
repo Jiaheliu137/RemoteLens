@@ -1,0 +1,27 @@
+{
+    "id": "b7e2c4a1-6d3f-4f0e-9a58-3c1d7e9f2a64",
+    "version": "0.1.0",
+    "platform": "all",
+    "arch": "all",
+    "name": "{{manifest.app.name}}",
+    "logo": "/logo.png",
+    "keywords": ["remote", "mobile", "phone", "web", "viewer", "tailscale"],
+    "devTools": false,
+    "fallbackLanguage": "en",
+    "languages": ["en", "zh_CN", "zh_TW"],
+    "main": {
+        "serviceMode": true,
+        "runAfterInstall": true,
+        "frame": false,
+        "vibrancy": true,
+        "url": "index.html",
+        "width": 420,
+        "height": 700,
+        "minWidth": 380,
+        "minHeight": 560,
+        "maxWidth": 560,
+        "resizable": true,
+        "maximizable": false,
+        "fullscreenable": false
+    }
+}
